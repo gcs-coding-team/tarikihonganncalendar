@@ -12,8 +12,9 @@ import (
 )
 
 var (
-	ErrNotFound = errors.New("task not found")
-	ErrConflict = errors.New("version conflict")
+	ErrNotFound   = errors.New("task not found")
+	ErrConflict   = errors.New("version conflict")
+	ErrValidation = errors.New("validation error")
 )
 
 type Service struct {
@@ -42,6 +43,13 @@ type UpdateInput struct {
 }
 
 func (s *Service) Create(ctx context.Context, input CreateInput) (*domain.Task, error) {
+	if len(input.Title) == 0 || len(input.Title) > 200 {
+		return nil, ErrValidation
+	}
+	if len(input.Description) > 2000 {
+		return nil, ErrValidation
+	}
+
 	now := time.Now()
 	task := &domain.Task{
 		ID:          uuid.Must(uuid.NewV7()).String(),
@@ -76,6 +84,13 @@ func (s *Service) List(ctx context.Context, userID string, filter repository.Lis
 }
 
 func (s *Service) Update(ctx context.Context, input UpdateInput) (*domain.Task, error) {
+	if len(input.Title) == 0 || len(input.Title) > 200 {
+		return nil, ErrValidation
+	}
+	if len(input.Description) > 2000 {
+		return nil, ErrValidation
+	}
+
 	task, err := s.tasks.FindByID(ctx, input.ID)
 	if err != nil {
 		return nil, err

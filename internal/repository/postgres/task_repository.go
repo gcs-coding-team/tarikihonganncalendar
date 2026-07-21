@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -48,12 +49,12 @@ func (r *TaskRepository) FindByUserID(ctx context.Context, userID string, filter
 
 	if filter.UpdatedAfter != nil {
 		args = append(args, *filter.UpdatedAfter)
-		query += ` AND updated_at > $` + string(rune(len(args)+'0'))
+		query += fmt.Sprintf(` AND updated_at > $%d`, len(args))
 	}
 
 	if filter.Cursor != "" {
 		args = append(args, filter.Cursor)
-		query += ` AND (updated_at, id) < (SELECT updated_at, id FROM tasks WHERE id = $` + string(rune(len(args)+'0')) + `)`
+		query += fmt.Sprintf(` AND (updated_at, id) < (SELECT updated_at, id FROM tasks WHERE id = $%d)`, len(args))
 	}
 
 	limit := filter.Limit
@@ -64,7 +65,7 @@ func (r *TaskRepository) FindByUserID(ctx context.Context, userID string, filter
 		limit = 200
 	}
 	args = append(args, limit+1)
-	query += ` ORDER BY updated_at DESC, id DESC LIMIT $` + string(rune(len(args)+'0'))
+	query += fmt.Sprintf(` ORDER BY updated_at DESC, id DESC LIMIT $%d`, len(args))
 
 	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {

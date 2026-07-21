@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -75,7 +76,7 @@ func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
 	cursor := r.URL.Query().Get("cursor")
 	limit := 50
 	if r.URL.Query().Get("limit") != "" {
-		if l, err := parseInt(r.URL.Query().Get("limit")); err == nil && l > 0 {
+		if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 {
 			limit = l
 		}
 	}
@@ -177,13 +178,4 @@ func toTaskResponse(t *domain.Task) map[string]any {
 	}
 }
 
-func parseInt(s string) (int, error) {
-	var n int
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return 0, errors.New("not a number")
-		}
-		n = n*10 + int(c-'0')
-	}
-	return n, nil
-}
+

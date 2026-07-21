@@ -39,7 +39,7 @@ func main() {
 	sessionRepo := postgres.NewSessionRepository(pool)
 
 	authSvc := auth.NewService(userRepo, sessionRepo)
-	authH := handler.NewAuthHandler(authSvc)
+	authH := handler.NewAuthHandler(authSvc, cfg.AppEnv == "production")
 
 	taskRepo := postgres.NewTaskRepository(pool)
 	taskSvc := task.NewService(taskRepo)
