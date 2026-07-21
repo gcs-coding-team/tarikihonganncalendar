@@ -122,6 +122,10 @@ func verifyPassword(storedHash, password string) bool {
 	return string(computedHash) == string(expectedHash)
 }
 
+func (s *Service) GetUser(ctx context.Context, userID string) (*domain.User, error) {
+	return s.users.FindByID(ctx, userID)
+}
+
 func (s *Service) Logout(ctx context.Context, token string) error {
 	tokenHash := sha256.Sum256([]byte(token))
 	session, err := s.sessions.FindByTokenHash(ctx, tokenHash[:])

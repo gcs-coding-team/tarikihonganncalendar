@@ -130,3 +130,27 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 
 	response.NoContent(w)
 }
+
+func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	if userID == "" {
+		response.Unauthorized(w, middleware.GetRequestID(r.Context()), "not authenticated")
+		return
+	}
+
+	user, err := h.svc.GetUser(r.Context(), userID)
+	if err != nil {
+		response.InternalError(w, middleware.GetRequestID(r.Context()), "failed to get user")
+		return
+	}
+	if user == nil {
+		response.NotFound(w, middleware.GetRequestID(r.Context()), "user not found")
+		return
+	}
+
+	response.OK(w, middleware.GetRequestID(r.Context()), map[string]any{
+		"id":          user.ID,
+		"email":       user.Email,
+		"displayName": user.DisplayName,
+	})
+}

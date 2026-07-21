@@ -51,6 +51,7 @@ func main() {
 			r.Post("/register", authH.Register)
 			r.Post("/login", authH.Login)
 			r.Post("/logout", authH.Logout)
+			r.With(middleware.RequireAuth(sessionRepo)).Get("/me", authH.Me)
 		})
 	})
 
