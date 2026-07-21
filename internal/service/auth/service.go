@@ -79,7 +79,7 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (*AuthResul
 		return nil, err
 	}
 
-	return s.createSession(ctx, userID, now)
+	return s.createSession(ctx, user)
 }
 
 type LoginInput struct {
@@ -102,7 +102,7 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (*AuthResult, err
 		return nil, ErrInvalidCredentials
 	}
 
-	return s.createSession(ctx, user.ID, time.Now())
+	return s.createSession(ctx, user)
 }
 
 func verifyPassword(storedHash, password string) bool {
@@ -138,7 +138,9 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 	return s.sessions.DeleteByID(ctx, session.ID)
 }
 
-func (s *Service) createSession(ctx context.Context, userID string, now time.Time) (*AuthResult, error) {
+func (s *Service) createSession(ctx context.Context, user *domain.User) (*AuthResult, error) {
+	now := time.Now()
+
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
 		return nil, err
@@ -149,7 +151,7 @@ func (s *Service) createSession(ctx context.Context, userID string, now time.Tim
 
 	session := &domain.Session{
 		ID:         uuid.Must(uuid.NewV7()).String(),
-		UserID:     userID,
+		UserID:     user.ID,
 		TokenHash:  tokenHash[:],
 		ExpiresAt:  now.Add(720 * time.Hour),
 		LastUsedAt: now,
@@ -161,7 +163,7 @@ func (s *Service) createSession(ctx context.Context, userID string, now time.Tim
 	}
 
 	return &AuthResult{
-		User:    &domain.User{ID: userID},
+		User:    user,
 		Session: session,
 		Token:   token,
 	}, nil
