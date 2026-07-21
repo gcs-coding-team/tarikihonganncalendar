@@ -19,6 +19,8 @@ import (
 	"github.com/zatunohito/tarikihonganncalendar/internal/repository/postgres"
 	"github.com/zatunohito/tarikihonganncalendar/internal/service/auth"
 	"github.com/zatunohito/tarikihonganncalendar/internal/service/task"
+	"github.com/zatunohito/tarikihonganncalendar/internal/service/upload"
+	"github.com/zatunohito/tarikihonganncalendar/internal/storage"
 )
 
 func main() {
@@ -40,6 +42,25 @@ func main() {
 	taskRepo := postgres.NewTaskRepository(pool)
 	taskSvc := task.NewService(taskRepo)
 	taskH := handler.NewTaskHandler(taskSvc)
+
+	storageClient, err := storage.NewMinioClient(storage.MinioConfig{
+		Endpoint:  cfg.ObjectStorageEndpoint,
+		AccessKey: cfg.ObjectStorageAccessKey,
+		SecretKey: cfg.ObjectStorageSecretKey,
+		Bucket:    cfg.ObjectStorageBucket,
+		Region:    cfg.ObjectStorageRegion,
+	})
+	if err != nil {
+		slog.Error("failed to create storage client", "error", err)
+		os.Exit(1)
+	}
+
+	printRepo := postgres.NewPrintRepository(pool)
+	uploadSvc := upload.NewService(printRepo, storageClient, upload.Config{
+		PresignedURLTTL: cfg.PresignedURLTTL,
+		MaxUploadBytes:  cfg.MaxUploadBytes,
+	})
+	uploadH := handler.NewUploadHandler(uploadSvc)
 
 	r := chi.NewRouter()
 
@@ -66,6 +87,7 @@ func main() {
 			r.Get("/tasks/{taskId}", taskH.Get)
 			r.Patch("/tasks/{taskId}", taskH.Update)
 			r.Delete("/tasks/{taskId}", taskH.Delete)
+			r.Post("/uploads", uploadH.Create)
 		})
 	})
 
