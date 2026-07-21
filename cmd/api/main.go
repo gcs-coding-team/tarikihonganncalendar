@@ -10,6 +10,9 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/zatunohito/tarikihonganncalendar/internal/httpapi/middleware"
+	"github.com/zatunohito/tarikihonganncalendar/internal/httpapi/response"
 )
 
 func main() {
@@ -18,7 +21,14 @@ func main() {
 		port = "8080"
 	}
 
+	frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
+
 	r := chi.NewRouter()
+
+	r.Use(middleware.Recoverer)
+	r.Use(middleware.RequestID)
+	r.Use(middleware.Logger)
+	r.Use(middleware.CORS(frontendOrigin))
 
 	r.Get("/healthz", healthz)
 	r.Get("/readyz", readyz)
@@ -59,13 +69,9 @@ func main() {
 }
 
 func healthz(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"ok"}`))
+	response.OK(w, middleware.GetRequestID(r.Context()), map[string]string{"status": "ok"})
 }
 
 func readyz(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"ready"}`))
+	response.OK(w, middleware.GetRequestID(r.Context()), map[string]string{"status": "ready"})
 }
