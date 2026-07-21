@@ -11,24 +11,20 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/zatunohito/tarikihonganncalendar/internal/config"
 	"github.com/zatunohito/tarikihonganncalendar/internal/httpapi/middleware"
 	"github.com/zatunohito/tarikihonganncalendar/internal/httpapi/response"
 )
 
 func main() {
-	port := os.Getenv("HTTP_PORT")
-	if port == "" {
-		port = "8080"
-	}
-
-	frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
+	cfg := config.Load()
 
 	r := chi.NewRouter()
 
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Logger)
-	r.Use(middleware.CORS(frontendOrigin))
+	r.Use(middleware.CORS(cfg.FrontendOrigin))
 
 	r.Get("/healthz", healthz)
 	r.Get("/readyz", readyz)
@@ -37,7 +33,7 @@ func main() {
 	})
 
 	srv := &http.Server{
-		Addr:         ":" + port,
+		Addr:         ":" + cfg.HTTPPort,
 		Handler:      r,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
@@ -48,7 +44,7 @@ func main() {
 	defer stop()
 
 	go func() {
-		slog.Info("starting server", "port", port)
+		slog.Info("starting server", "port", cfg.HTTPPort)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("server error", "error", err)
 			os.Exit(1)
