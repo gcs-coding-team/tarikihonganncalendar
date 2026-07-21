@@ -24,7 +24,14 @@ func NewHandler(repo repository.Repository) *Handler {
 	colonyService := service.NewColonyService(repo)
 	analysisJobService := service.NewAnalysisJobService()
 
-	h.mux.HandleFunc("/v1/events", func(w http.ResponseWriter, r *http.Request) {
+	authWrap := h.withAuth
+	noAuth := func(next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			next(w, r)
+		}
+	}
+
+	h.mux.HandleFunc("/v1/events", authWrap(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			h.listEvents(w, r, eventService)
@@ -33,9 +40,9 @@ func NewHandler(repo repository.Repository) *Handler {
 		default:
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": map[string]any{"code": "METHOD_NOT_ALLOWED"}})
 		}
-	})
+	}))
 
-	h.mux.HandleFunc("/v1/events/", func(w http.ResponseWriter, r *http.Request) {
+	h.mux.HandleFunc("/v1/events/", authWrap(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			h.getEvent(w, r, eventService)
@@ -46,9 +53,9 @@ func NewHandler(repo repository.Repository) *Handler {
 		default:
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": map[string]any{"code": "METHOD_NOT_ALLOWED"}})
 		}
-	})
+	}))
 
-	h.mux.HandleFunc("/v1/timetable-entries", func(w http.ResponseWriter, r *http.Request) {
+	h.mux.HandleFunc("/v1/timetable-entries", authWrap(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			h.listTimetableEntries(w, r, timetableService)
@@ -57,10 +64,12 @@ func NewHandler(repo repository.Repository) *Handler {
 		default:
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": map[string]any{"code": "METHOD_NOT_ALLOWED"}})
 		}
-	})
+	}))
 
-	h.mux.HandleFunc("/v1/timetable-entries/", func(w http.ResponseWriter, r *http.Request) {
+	h.mux.HandleFunc("/v1/timetable-entries/", authWrap(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
+		case http.MethodGet:
+			h.getTimetableEntry(w, r, timetableService)
 		case http.MethodPatch:
 			h.updateTimetableEntry(w, r, timetableService)
 		case http.MethodDelete:
@@ -68,9 +77,9 @@ func NewHandler(repo repository.Repository) *Handler {
 		default:
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": map[string]any{"code": "METHOD_NOT_ALLOWED"}})
 		}
-	})
+	}))
 
-	h.mux.HandleFunc("/v1/colonies", func(w http.ResponseWriter, r *http.Request) {
+	h.mux.HandleFunc("/v1/colonies", authWrap(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			h.listColonies(w, r, colonyService)
@@ -79,13 +88,13 @@ func NewHandler(repo repository.Repository) *Handler {
 		default:
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": map[string]any{"code": "METHOD_NOT_ALLOWED"}})
 		}
-	})
+	}))
 
-	h.mux.HandleFunc("/v1/colonies/", func(w http.ResponseWriter, r *http.Request) {
+	h.mux.HandleFunc("/v1/colonies/", authWrap(func(w http.ResponseWriter, r *http.Request) {
 		h.handleColonySubroutes(w, r, colonyService)
-	})
+	}))
 
-	h.mux.HandleFunc("/v1/auth/sessions", func(w http.ResponseWriter, r *http.Request) {
+	h.mux.HandleFunc("/v1/auth/sessions", noAuth(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:
 			h.createSession(w, r, h.authSvc)
@@ -94,17 +103,17 @@ func NewHandler(repo repository.Repository) *Handler {
 		default:
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": map[string]any{"code": "METHOD_NOT_ALLOWED"}})
 		}
-	})
+	}))
 
-	h.mux.HandleFunc("/v1/auth/sessions/", func(w http.ResponseWriter, r *http.Request) {
+	h.mux.HandleFunc("/v1/auth/sessions/", noAuth(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodDelete {
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": map[string]any{"code": "METHOD_NOT_ALLOWED"}})
 			return
 		}
 		h.deleteSession(w, r, h.authSvc)
-	})
+	}))
 
-	h.mux.HandleFunc("/v1/uploads/jobs", func(w http.ResponseWriter, r *http.Request) {
+	h.mux.HandleFunc("/v1/uploads/jobs", authWrap(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:
 			h.createAnalysisJob(w, r, analysisJobService)
@@ -113,6 +122,18 @@ func NewHandler(repo repository.Repository) *Handler {
 		default:
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": map[string]any{"code": "METHOD_NOT_ALLOWED"}})
 		}
+	}))
+
+	h.mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	})
+
+	h.mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
 	})
 
 	return h
@@ -123,7 +144,27 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) resolveUserID(r *http.Request) string {
-	return h.authSvc.ResolveUserID(r.Header.Get("X-User-ID"), r.Header.Get("Authorization"))
+	userID := h.authSvc.ResolveUserID(r.Header.Get("X-User-ID"), r.Header.Get("Authorization"))
+	if userID == "" {
+		if cookie, err := r.Cookie("session"); err == nil {
+			if session, err := h.authSvc.Repo().GetSessionByToken(cookie.Value); err == nil {
+				userID = session.UserID
+			}
+		}
+	}
+	return userID
+}
+
+func (h *Handler) withAuth(next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := h.resolveUserID(r)
+		if userID == "" {
+			writeJSON(w, http.StatusUnauthorized, map[string]any{"error": map[string]any{"code": "UNAUTHORIZED"}})
+			return
+		}
+		r.Header.Set("X-User-ID", userID)
+		next(w, r)
+	}
 }
 
 func (h *Handler) listEvents(w http.ResponseWriter, r *http.Request, svc *service.EventService) {
@@ -165,6 +206,10 @@ func (h *Handler) createEvent(w http.ResponseWriter, r *http.Request, svc *servi
 	}
 	item, err := svc.Create(userID, service.CreateEventInput{Title: input.Title, Description: input.Description, StartAt: startAt, EndAt: endAt, AllDay: input.AllDay})
 	if err != nil {
+		if repository.IsValidationError(err) {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{"code": "VALIDATION_ERROR"}})
+			return
+		}
 		writeJSON(w, http.StatusConflict, map[string]any{"error": map[string]any{"code": "CONFLICT"}})
 		return
 	}
@@ -272,6 +317,17 @@ func (h *Handler) createTimetableEntry(w http.ResponseWriter, r *http.Request, s
 	writeJSON(w, http.StatusCreated, map[string]any{"data": serializeTimetableEntry(item)})
 }
 
+func (h *Handler) getTimetableEntry(w http.ResponseWriter, r *http.Request, svc *service.TimetableService) {
+	userID := h.resolveUserID(r)
+	entryID := strings.TrimPrefix(r.URL.Path, "/v1/timetable-entries/")
+	item, err := svc.Get(userID, entryID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": map[string]any{"code": "NOT_FOUND"}})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": serializeTimetableEntry(item)})
+}
+
 func (h *Handler) updateTimetableEntry(w http.ResponseWriter, r *http.Request, svc *service.TimetableService) {
 	userID := h.resolveUserID(r)
 	entryID := strings.TrimPrefix(r.URL.Path, "/v1/timetable-entries/")
@@ -345,25 +401,72 @@ func (h *Handler) handleColonySubroutes(w http.ResponseWriter, r *http.Request, 
 	}
 
 	parts := strings.Split(path, "/")
+
 	if len(parts) == 1 {
-		switch parts[0] {
-		case "members":
-			writeJSON(w, http.StatusOK, map[string]any{"data": []any{}})
-		case "feed":
-			writeJSON(w, http.StatusOK, map[string]any{"data": []any{}})
-		case "join":
-			writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"ok": true}})
-		case "leave":
-			writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"ok": true}})
-		default:
+		id := parts[0]
+		if id == "members" || id == "feed" || id == "join" || id == "leave" {
 			writeJSON(w, http.StatusNotFound, map[string]any{"error": map[string]any{"code": "NOT_FOUND"}})
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			userID := h.resolveUserID(r)
+			item, err := svc.Get(userID, id)
+			if err != nil {
+				writeJSON(w, http.StatusNotFound, map[string]any{"error": map[string]any{"code": "NOT_FOUND"}})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"data": serializeColony(item)})
+		case http.MethodPatch:
+			userID := h.resolveUserID(r)
+			var input struct {
+				Name        *string `json:"name"`
+				Description *string `json:"description"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{"code": "VALIDATION_ERROR"}})
+				return
+			}
+			item, err := svc.Update(userID, id, service.UpdateColonyInput{Name: input.Name, Description: input.Description})
+			if err != nil {
+				writeJSON(w, http.StatusNotFound, map[string]any{"error": map[string]any{"code": "NOT_FOUND"}})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"data": serializeColony(item)})
+		case http.MethodDelete:
+			userID := h.resolveUserID(r)
+			if err := svc.Delete(userID, id); err != nil {
+				writeJSON(w, http.StatusForbidden, map[string]any{"error": map[string]any{"code": "FORBIDDEN"}})
+				return
+			}
+			writeJSON(w, http.StatusNoContent, nil)
+		default:
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": map[string]any{"code": "METHOD_NOT_ALLOWED"}})
 		}
 		return
 	}
 
-	if len(parts) == 2 && parts[1] == "shared-items" {
-		h.handleSharedItems(w, r, svc, parts[0])
-		return
+	if len(parts) == 2 {
+		colonyID := parts[0]
+		switch parts[1] {
+		case "members":
+			userID := h.resolveUserID(r)
+			h.listColonyMembers(w, r, svc, userID, colonyID)
+			return
+		case "feed":
+			userID := h.resolveUserID(r)
+			h.listColonyFeed(w, r, svc, userID, colonyID)
+			return
+		case "join":
+			h.joinColony(w, r, svc, colonyID)
+			return
+		case "leave":
+			h.leaveColony(w, r, svc, colonyID)
+			return
+		case "shared-items":
+			h.handleSharedItems(w, r, svc, colonyID)
+			return
+		}
 	}
 
 	if len(parts) == 3 && parts[1] == "shared-items" {
@@ -372,6 +475,75 @@ func (h *Handler) handleColonySubroutes(w http.ResponseWriter, r *http.Request, 
 	}
 
 	writeJSON(w, http.StatusNotFound, map[string]any{"error": map[string]any{"code": "NOT_FOUND"}})
+}
+
+func (h *Handler) listColonyMembers(w http.ResponseWriter, r *http.Request, svc *service.ColonyService, userID, colonyID string) {
+	_, err := svc.Get(userID, colonyID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": map[string]any{"code": "NOT_FOUND"}})
+		return
+	}
+	members, err := svc.ListMembers(colonyID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": map[string]any{"code": "INTERNAL_ERROR"}})
+		return
+	}
+	out := make([]map[string]any, 0, len(members))
+	for _, m := range members {
+		out = append(out, map[string]any{"colonyId": m.ColonyID, "userId": m.UserID, "role": m.Role, "joinedAt": m.JoinedAt})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": out})
+}
+
+func (h *Handler) listColonyFeed(w http.ResponseWriter, r *http.Request, svc *service.ColonyService, userID, colonyID string) {
+	_, err := svc.Get(userID, colonyID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": map[string]any{"code": "NOT_FOUND"}})
+		return
+	}
+	items, err := svc.Feed(colonyID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": map[string]any{"code": "INTERNAL_ERROR"}})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": serializeSharedItems(items)})
+}
+
+func (h *Handler) joinColony(w http.ResponseWriter, r *http.Request, svc *service.ColonyService, colonyID string) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": map[string]any{"code": "METHOD_NOT_ALLOWED"}})
+		return
+	}
+	userID := h.resolveUserID(r)
+	var input struct {
+		InviteCode string `json:"inviteCode"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		input.InviteCode = ""
+	}
+	_, err := svc.Join(userID, colonyID, input.InviteCode)
+	if err != nil {
+		if err == repository.ErrForbidden {
+			writeJSON(w, http.StatusForbidden, map[string]any{"error": map[string]any{"code": "FORBIDDEN"}})
+			return
+		}
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": map[string]any{"code": "NOT_FOUND"}})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"ok": true}})
+}
+
+func (h *Handler) leaveColony(w http.ResponseWriter, r *http.Request, svc *service.ColonyService, colonyID string) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": map[string]any{"code": "METHOD_NOT_ALLOWED"}})
+		return
+	}
+	userID := h.resolveUserID(r)
+	if err := svc.Leave(userID, colonyID); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": map[string]any{"code": "NOT_FOUND"}})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"ok": true}})
 }
 
 func (h *Handler) handleSharedItems(w http.ResponseWriter, r *http.Request, svc *service.ColonyService, colonyID string) {
@@ -558,4 +730,12 @@ func serializeColonies(items []repository.Colony) []map[string]any {
 
 func serializeSharedItem(item repository.SharedItem) map[string]any {
 	return map[string]any{"id": item.ID, "colonyId": item.ColonyID, "sourceType": item.SourceType, "sourceId": item.SourceID, "createdBy": item.CreatedBy, "titleSnapshot": item.TitleSnapshot}
+}
+
+func serializeSharedItems(items []repository.SharedItem) []map[string]any {
+	out := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		out = append(out, serializeSharedItem(item))
+	}
+	return out
 }

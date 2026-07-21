@@ -36,7 +36,7 @@ func (s *EventService) Create(userID string, input CreateEventInput) (repository
 		return repository.Event{}, repository.ErrForbidden
 	}
 	if input.Title == "" {
-		return repository.Event{}, repository.ErrConflict
+		return repository.Event{}, repository.ValidationError("title is required")
 	}
 	event := repository.Event{
 		UserID:      userID,

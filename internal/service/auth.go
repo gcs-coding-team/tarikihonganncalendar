@@ -11,6 +11,10 @@ type AuthService struct {
 	repo repository.SessionRepository
 }
 
+func (s *AuthService) Repo() repository.SessionRepository {
+	return s.repo
+}
+
 func NewAuthService(repo repository.SessionRepository) *AuthService {
 	return &AuthService{repo: repo}
 }

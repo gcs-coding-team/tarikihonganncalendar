@@ -12,7 +12,17 @@ var (
 	ErrConflict  = errors.New("conflict")
 	ErrDuplicate = errors.New("duplicate")
 	ErrForbidden = errors.New("forbidden")
+
+	errValidation = errors.New("validation error")
 )
+
+func ValidationError(msg string) error {
+	return fmt.Errorf("%w: %s", errValidation, msg)
+}
+
+func IsValidationError(err error) bool {
+	return errors.Is(err, errValidation)
+}
 
 type Event struct {
 	ID          string    `json:"id"`
