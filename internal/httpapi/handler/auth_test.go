@@ -61,7 +61,7 @@ func newTestAuthHandler() *AuthHandler {
 	return NewAuthHandler(auth.NewService(
 		&mockUserRepoForHandler{users: map[string]*domain.User{}, emails: map[string]*domain.User{}},
 		&mockSessionRepoForHandler{sessions: map[string]*domain.Session{}, tokens: map[string]*domain.Session{}},
-	))
+	), false)
 }
 
 func TestAuthHandler_Register_Success(t *testing.T) {
@@ -217,7 +217,7 @@ func TestAuthHandler_Me_Success(t *testing.T) {
 
 	regBody := map[string]string{
 		"email":       "me@example.com",
-		"password":    "pass",
+		"password":    "password123",
 		"displayName": "Me User",
 	}
 	b, _ := json.Marshal(regBody)

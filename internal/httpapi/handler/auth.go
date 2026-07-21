@@ -11,11 +11,24 @@ import (
 )
 
 type AuthHandler struct {
-	svc *auth.Service
+	svc       *auth.Service
+	secure    bool
 }
 
-func NewAuthHandler(svc *auth.Service) *AuthHandler {
-	return &AuthHandler{svc: svc}
+func NewAuthHandler(svc *auth.Service, secure bool) *AuthHandler {
+	return &AuthHandler{svc: svc, secure: secure}
+}
+
+func (h *AuthHandler) sessionCookie(value string, maxAge int) *http.Cookie {
+	return &http.Cookie{
+		Name:     "session",
+		Value:    value,
+		HttpOnly: true,
+		Secure:   h.secure,
+		SameSite: http.SameSiteLaxMode,
+		Path:     "/",
+		MaxAge:   maxAge,
+	}
 }
 
 type registerRequest struct {
@@ -41,19 +54,15 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 			response.Conflict(w, middleware.GetRequestID(r.Context()), "email already registered")
 			return
 		}
+		if errors.Is(err, auth.ErrValidation) {
+			response.BadRequest(w, middleware.GetRequestID(r.Context()), "invalid input", nil)
+			return
+		}
 		response.InternalError(w, middleware.GetRequestID(r.Context()), "registration failed")
 		return
 	}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "session",
-		Value:    result.Token,
-		HttpOnly: true,
-		Secure:   false,
-		SameSite: http.SameSiteLaxMode,
-		Path:     "/",
-		MaxAge:   720 * 3600,
-	})
+	http.SetCookie(w, h.sessionCookie(result.Token, 720*3600))
 
 	response.Created(w, middleware.GetRequestID(r.Context()), map[string]any{
 		"id":           result.User.ID,
@@ -87,15 +96,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "session",
-		Value:    result.Token,
-		HttpOnly: true,
-		Secure:   false,
-		SameSite: http.SameSiteLaxMode,
-		Path:     "/",
-		MaxAge:   720 * 3600,
-	})
+	http.SetCookie(w, h.sessionCookie(result.Token, 720*3600))
 
 	response.OK(w, middleware.GetRequestID(r.Context()), map[string]any{
 		"id":           result.User.ID,
@@ -118,15 +119,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "session",
-		Value:    "",
-		HttpOnly: true,
-		Secure:   false,
-		SameSite: http.SameSiteLaxMode,
-		Path:     "/",
-		MaxAge:   -1,
-	})
+	http.SetCookie(w, h.sessionCookie("", -1))
 
 	response.NoContent(w)
 }

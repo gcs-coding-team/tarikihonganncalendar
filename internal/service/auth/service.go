@@ -21,6 +21,7 @@ var (
 	ErrEmailAlreadyRegistered = errors.New("email already registered")
 	ErrInvalidCredentials     = errors.New("invalid email or password")
 	ErrSessionNotFound        = errors.New("session not found")
+	ErrValidation             = errors.New("validation error")
 )
 
 type Service struct {
@@ -46,6 +47,16 @@ type AuthResult struct {
 
 func (s *Service) Register(ctx context.Context, input RegisterInput) (*AuthResult, error) {
 	email := strings.ToLower(strings.TrimSpace(input.Email))
+
+	if !strings.Contains(email, "@") || len(email) > 254 {
+		return nil, ErrValidation
+	}
+	if len(input.Password) < 8 || len(input.Password) > 128 {
+		return nil, ErrValidation
+	}
+	if name := strings.TrimSpace(input.DisplayName); len(name) == 0 || len(name) > 50 {
+		return nil, ErrValidation
+	}
 
 	existing, err := s.users.FindByEmail(ctx, email)
 	if err != nil {

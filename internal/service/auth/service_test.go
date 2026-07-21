@@ -104,7 +104,7 @@ func TestRegister_DuplicateEmail(t *testing.T) {
 	svc := newMockAuth()
 	_, err := svc.Register(context.Background(), RegisterInput{
 		Email:       "dup@example.com",
-		Password:    "pass1",
+		Password:    "password123",
 		DisplayName: "U1",
 	})
 	if err != nil {
@@ -113,7 +113,7 @@ func TestRegister_DuplicateEmail(t *testing.T) {
 
 	_, err = svc.Register(context.Background(), RegisterInput{
 		Email:       "dup@example.com",
-		Password:    "pass2",
+		Password:    "password456",
 		DisplayName: "U2",
 	})
 	if err != ErrEmailAlreadyRegistered {
@@ -257,10 +257,10 @@ func TestPasswordVerification(t *testing.T) {
 func TestPasswordVerifyCorrect(t *testing.T) {
 	svc := newMockAuth()
 	result, _ := svc.Register(context.Background(), RegisterInput{
-		Email: "verify@example.com", Password: "correct", DisplayName: "U",
+		Email: "verify@example.com", Password: "correct123", DisplayName: "U",
 	})
 
-	if !verifyPassword(result.User.PasswordHash, "correct") {
+	if !verifyPassword(result.User.PasswordHash, "correct123") {
 		t.Fatal("expected password verification to succeed")
 	}
 }
@@ -268,7 +268,7 @@ func TestPasswordVerifyCorrect(t *testing.T) {
 func TestPasswordVerifyWrong(t *testing.T) {
 	svc := newMockAuth()
 	result, _ := svc.Register(context.Background(), RegisterInput{
-		Email: "verify2@example.com", Password: "correct", DisplayName: "U",
+		Email: "verify2@example.com", Password: "correct123", DisplayName: "U",
 	})
 
 	if verifyPassword(result.User.PasswordHash, "wrong") {
