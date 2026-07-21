@@ -46,11 +46,11 @@ func NoContent(w http.ResponseWriter) {
 }
 
 func ListResponse(w http.ResponseWriter, requestID string, data any, nextCursor string) {
-	var nc *string
+	var nc string
 	if nextCursor != "" {
-		nc = &nextCursor
+		nc = nextCursor
 	}
-	writeJSON(w, http.StatusOK, List{Data: data, NextCursor: *nc, RequestID: requestID})
+	writeJSON(w, http.StatusOK, List{Data: data, NextCursor: nc, RequestID: requestID})
 }
 
 func Error(w http.ResponseWriter, requestID string, httpStatus int, code, message string, fields map[string]string) {
