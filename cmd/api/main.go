@@ -18,6 +18,7 @@ import (
 	"github.com/zatunohito/tarikihonganncalendar/internal/httpapi/response"
 	"github.com/zatunohito/tarikihonganncalendar/internal/repository/postgres"
 	"github.com/zatunohito/tarikihonganncalendar/internal/service/auth"
+	"github.com/zatunohito/tarikihonganncalendar/internal/service/analysis"
 	"github.com/zatunohito/tarikihonganncalendar/internal/service/print"
 	"github.com/zatunohito/tarikihonganncalendar/internal/service/task"
 	"github.com/zatunohito/tarikihonganncalendar/internal/service/upload"
@@ -66,6 +67,11 @@ func main() {
 	printSvc := print.NewService(printRepo, storageClient)
 	printH := handler.NewPrintHandler(printSvc)
 
+	analysisJobRepo := postgres.NewAnalysisJobRepository(pool)
+	analysisResultRepo := postgres.NewAnalysisResultRepository(pool)
+	analysisSvc := analysis.NewService(analysisJobRepo, analysisResultRepo, printRepo)
+	analysisH := handler.NewAnalysisHandler(analysisSvc)
+
 	r := chi.NewRouter()
 
 	r.Use(middleware.Recoverer)
@@ -95,6 +101,10 @@ func main() {
 			r.Get("/prints", printH.List)
 			r.Get("/prints/{printId}", printH.Get)
 			r.Delete("/prints/{printId}", printH.Delete)
+			r.Post("/analysis-jobs", analysisH.Start)
+			r.Get("/analysis-jobs/{jobId}", analysisH.Get)
+			r.Post("/analysis-jobs/{jobId}/retry", analysisH.Retry)
+			r.Post("/analysis-jobs/{jobId}/commit", analysisH.Commit)
 		})
 	})
 
