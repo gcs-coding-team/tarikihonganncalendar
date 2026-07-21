@@ -50,6 +50,7 @@ func main() {
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", authH.Register)
 			r.Post("/login", authH.Login)
+			r.Post("/logout", authH.Logout)
 		})
 	})
 

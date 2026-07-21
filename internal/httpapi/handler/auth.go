@@ -101,3 +101,32 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		"id":           result.User.ID,
 	})
 }
+
+func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("session")
+	if err != nil {
+		response.Unauthorized(w, middleware.GetRequestID(r.Context()), "not authenticated")
+		return
+	}
+
+	if err := h.svc.Logout(r.Context(), cookie.Value); err != nil {
+		if errors.Is(err, auth.ErrSessionNotFound) {
+			response.Unauthorized(w, middleware.GetRequestID(r.Context()), "session not found")
+			return
+		}
+		response.InternalError(w, middleware.GetRequestID(r.Context()), "logout failed")
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session",
+		Value:    "",
+		HttpOnly: true,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
+		Path:     "/",
+		MaxAge:   -1,
+	})
+
+	response.NoContent(w)
+}

@@ -122,6 +122,18 @@ func verifyPassword(storedHash, password string) bool {
 	return string(computedHash) == string(expectedHash)
 }
 
+func (s *Service) Logout(ctx context.Context, token string) error {
+	tokenHash := sha256.Sum256([]byte(token))
+	session, err := s.sessions.FindByTokenHash(ctx, tokenHash[:])
+	if err != nil {
+		return err
+	}
+	if session == nil {
+		return ErrSessionNotFound
+	}
+	return s.sessions.DeleteByID(ctx, session.ID)
+}
+
 func (s *Service) createSession(ctx context.Context, userID string, now time.Time) (*AuthResult, error) {
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
