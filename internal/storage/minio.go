@@ -34,6 +34,10 @@ func NewMinioClient(cfg MinioConfig) (*MinioClient, error) {
 	return &MinioClient{client: client, bucket: cfg.Bucket}, nil
 }
 
+func (m *MinioClient) BucketExists(ctx context.Context) (bool, error) {
+	return m.client.BucketExists(ctx, m.bucket)
+}
+
 func (m *MinioClient) PresignedPutURL(ctx context.Context, objectKey string, ttl time.Duration) (string, time.Time, error) {
 	url, err := m.client.PresignedPutObject(ctx, m.bucket, objectKey, ttl)
 	if err != nil {

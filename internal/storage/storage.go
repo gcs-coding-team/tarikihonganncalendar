@@ -10,4 +10,5 @@ type Client interface {
 	PresignedPutURL(ctx context.Context, objectKey string, ttl time.Duration) (string, time.Time, error)
 	GetObject(ctx context.Context, objectKey string) (io.ReadCloser, error)
 	DeleteObject(ctx context.Context, objectKey string) error
+	BucketExists(ctx context.Context) (bool, error)
 }
