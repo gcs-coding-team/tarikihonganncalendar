@@ -61,3 +61,43 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		"displayName":  req.DisplayName,
 	})
 }
+
+type loginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
+	var req loginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.BadRequest(w, middleware.GetRequestID(r.Context()), "invalid request body", nil)
+		return
+	}
+
+	result, err := h.svc.Login(r.Context(), auth.LoginInput{
+		Email:    req.Email,
+		Password: req.Password,
+	})
+	if err != nil {
+		if errors.Is(err, auth.ErrInvalidCredentials) {
+			response.Unauthorized(w, middleware.GetRequestID(r.Context()), "invalid email or password")
+			return
+		}
+		response.InternalError(w, middleware.GetRequestID(r.Context()), "login failed")
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session",
+		Value:    result.Token,
+		HttpOnly: true,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
+		Path:     "/",
+		MaxAge:   720 * 3600,
+	})
+
+	response.OK(w, middleware.GetRequestID(r.Context()), map[string]any{
+		"id":           result.User.ID,
+	})
+}
