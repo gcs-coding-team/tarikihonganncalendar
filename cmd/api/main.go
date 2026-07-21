@@ -10,14 +10,31 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/zatunohito/tarikihonganncalendar/internal/config"
+	"github.com/zatunohito/tarikihonganncalendar/internal/httpapi/handler"
 	"github.com/zatunohito/tarikihonganncalendar/internal/httpapi/middleware"
 	"github.com/zatunohito/tarikihonganncalendar/internal/httpapi/response"
+	"github.com/zatunohito/tarikihonganncalendar/internal/repository/postgres"
+	"github.com/zatunohito/tarikihonganncalendar/internal/service/auth"
 )
 
 func main() {
 	cfg := config.Load()
+
+	pool, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
+	if err != nil {
+		slog.Error("failed to connect to database", "error", err)
+		os.Exit(1)
+	}
+	defer pool.Close()
+
+	userRepo := postgres.NewUserRepository(pool)
+	sessionRepo := postgres.NewSessionRepository(pool)
+
+	authSvc := auth.NewService(userRepo, sessionRepo)
+	authH := handler.NewAuthHandler(authSvc)
 
 	r := chi.NewRouter()
 
@@ -30,6 +47,9 @@ func main() {
 	r.Get("/readyz", readyz)
 
 	r.Route("/v1", func(r chi.Router) {
+		r.Route("/auth", func(r chi.Router) {
+			r.Post("/register", authH.Register)
+		})
 	})
 
 	srv := &http.Server{
