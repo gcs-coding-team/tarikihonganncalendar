@@ -18,6 +18,10 @@ import (
 	"github.com/zatunohito/tarikihonganncalendar/internal/httpapi/response"
 	"github.com/zatunohito/tarikihonganncalendar/internal/repository/postgres"
 	"github.com/zatunohito/tarikihonganncalendar/internal/service/auth"
+	"github.com/zatunohito/tarikihonganncalendar/internal/service/print"
+	"github.com/zatunohito/tarikihonganncalendar/internal/service/task"
+	"github.com/zatunohito/tarikihonganncalendar/internal/service/upload"
+	"github.com/zatunohito/tarikihonganncalendar/internal/storage"
 )
 
 func main() {
@@ -36,6 +40,32 @@ func main() {
 	authSvc := auth.NewService(userRepo, sessionRepo)
 	authH := handler.NewAuthHandler(authSvc)
 
+	taskRepo := postgres.NewTaskRepository(pool)
+	taskSvc := task.NewService(taskRepo)
+	taskH := handler.NewTaskHandler(taskSvc)
+
+	storageClient, err := storage.NewMinioClient(storage.MinioConfig{
+		Endpoint:  cfg.ObjectStorageEndpoint,
+		AccessKey: cfg.ObjectStorageAccessKey,
+		SecretKey: cfg.ObjectStorageSecretKey,
+		Bucket:    cfg.ObjectStorageBucket,
+		Region:    cfg.ObjectStorageRegion,
+	})
+	if err != nil {
+		slog.Error("failed to create storage client", "error", err)
+		os.Exit(1)
+	}
+
+	printRepo := postgres.NewPrintRepository(pool)
+	uploadSvc := upload.NewService(printRepo, storageClient, upload.Config{
+		PresignedURLTTL: cfg.PresignedURLTTL,
+		MaxUploadBytes:  cfg.MaxUploadBytes,
+	})
+	uploadH := handler.NewUploadHandler(uploadSvc)
+
+	printSvc := print.NewService(printRepo, storageClient)
+	printH := handler.NewPrintHandler(printSvc)
+
 	r := chi.NewRouter()
 
 	r.Use(middleware.Recoverer)
@@ -49,6 +79,22 @@ func main() {
 	r.Route("/v1", func(r chi.Router) {
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", authH.Register)
+			r.Post("/login", authH.Login)
+			r.Post("/logout", authH.Logout)
+			r.With(middleware.RequireAuth(sessionRepo)).Get("/me", authH.Me)
+		})
+
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.RequireAuth(sessionRepo))
+			r.Get("/tasks", taskH.List)
+			r.Post("/tasks", taskH.Create)
+			r.Get("/tasks/{taskId}", taskH.Get)
+			r.Patch("/tasks/{taskId}", taskH.Update)
+			r.Delete("/tasks/{taskId}", taskH.Delete)
+			r.Post("/uploads", uploadH.Create)
+			r.Get("/prints", printH.List)
+			r.Get("/prints/{printId}", printH.Get)
+			r.Delete("/prints/{printId}", printH.Delete)
 		})
 	})
 

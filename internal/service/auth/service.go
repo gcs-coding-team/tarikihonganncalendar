@@ -82,6 +82,62 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (*AuthResul
 	return s.createSession(ctx, userID, now)
 }
 
+type LoginInput struct {
+	Email    string
+	Password string
+}
+
+func (s *Service) Login(ctx context.Context, input LoginInput) (*AuthResult, error) {
+	email := strings.ToLower(strings.TrimSpace(input.Email))
+
+	user, err := s.users.FindByEmail(ctx, email)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, ErrInvalidCredentials
+	}
+
+	if !verifyPassword(user.PasswordHash, input.Password) {
+		return nil, ErrInvalidCredentials
+	}
+
+	return s.createSession(ctx, user.ID, time.Now())
+}
+
+func verifyPassword(storedHash, password string) bool {
+	parts := strings.SplitN(storedHash, ":", 2)
+	if len(parts) != 2 {
+		return false
+	}
+	salt, err := hex.DecodeString(parts[0])
+	if err != nil {
+		return false
+	}
+	expectedHash, err := hex.DecodeString(parts[1])
+	if err != nil {
+		return false
+	}
+	computedHash := argon2.IDKey([]byte(password), salt, 1, 64*1024, 4, 32)
+	return string(computedHash) == string(expectedHash)
+}
+
+func (s *Service) GetUser(ctx context.Context, userID string) (*domain.User, error) {
+	return s.users.FindByID(ctx, userID)
+}
+
+func (s *Service) Logout(ctx context.Context, token string) error {
+	tokenHash := sha256.Sum256([]byte(token))
+	session, err := s.sessions.FindByTokenHash(ctx, tokenHash[:])
+	if err != nil {
+		return err
+	}
+	if session == nil {
+		return ErrSessionNotFound
+	}
+	return s.sessions.DeleteByID(ctx, session.ID)
+}
+
 func (s *Service) createSession(ctx context.Context, userID string, now time.Time) (*AuthResult, error) {
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
