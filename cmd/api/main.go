@@ -18,6 +18,7 @@ import (
 	"github.com/zatunohito/tarikihonganncalendar/internal/httpapi/response"
 	"github.com/zatunohito/tarikihonganncalendar/internal/repository/postgres"
 	"github.com/zatunohito/tarikihonganncalendar/internal/service/auth"
+	"github.com/zatunohito/tarikihonganncalendar/internal/service/task"
 )
 
 func main() {
@@ -36,6 +37,10 @@ func main() {
 	authSvc := auth.NewService(userRepo, sessionRepo)
 	authH := handler.NewAuthHandler(authSvc)
 
+	taskRepo := postgres.NewTaskRepository(pool)
+	taskSvc := task.NewService(taskRepo)
+	taskH := handler.NewTaskHandler(taskSvc)
+
 	r := chi.NewRouter()
 
 	r.Use(middleware.Recoverer)
@@ -52,6 +57,15 @@ func main() {
 			r.Post("/login", authH.Login)
 			r.Post("/logout", authH.Logout)
 			r.With(middleware.RequireAuth(sessionRepo)).Get("/me", authH.Me)
+		})
+
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.RequireAuth(sessionRepo))
+			r.Get("/tasks", taskH.List)
+			r.Post("/tasks", taskH.Create)
+			r.Get("/tasks/{taskId}", taskH.Get)
+			r.Patch("/tasks/{taskId}", taskH.Update)
+			r.Delete("/tasks/{taskId}", taskH.Delete)
 		})
 	})
 
