@@ -102,6 +102,41 @@ type Repository interface {
 	EventRepository
 	TimetableRepository
 	ColonyRepository
+	SessionRepository
+	AnalysisJobRepository
+}
+
+type Session struct {
+	ID        string
+	UserID    string
+	Token     string
+	Name      string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type AnalysisJob struct {
+	ID            string
+	UserID        string
+	ContentType   string
+	Filename      string
+	Status        string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	ResultSummary string
+}
+
+type SessionRepository interface {
+	CreateSession(session Session) (Session, error)
+	GetSessionByToken(token string) (Session, error)
+	DeleteSession(token string) error
+}
+
+type AnalysisJobRepository interface {
+	CreateAnalysisJob(job AnalysisJob) (AnalysisJob, error)
+	GetAnalysisJob(jobID string) (AnalysisJob, error)
+	ListAnalysisJobs(userID string) ([]AnalysisJob, error)
+	UpdateAnalysisJob(job AnalysisJob) (AnalysisJob, error)
 }
 
 type MemoryRepository struct {
@@ -112,6 +147,8 @@ type MemoryRepository struct {
 	colonyMembers map[string]map[string]ColonyMember
 	sharedItems   map[string]SharedItem
 	colonyIndex   map[string][]string
+	sessions      map[string]Session
+	analysisJobs  map[string]AnalysisJob
 }
 
 func NewMemoryRepository() *MemoryRepository {
@@ -122,6 +159,8 @@ func NewMemoryRepository() *MemoryRepository {
 		colonyMembers: make(map[string]map[string]ColonyMember),
 		sharedItems:   make(map[string]SharedItem),
 		colonyIndex:   make(map[string][]string),
+		sessions:      make(map[string]Session),
+		analysisJobs:  make(map[string]AnalysisJob),
 	}
 }
 
@@ -435,6 +474,96 @@ func (r *MemoryRepository) DeleteSharedItem(userID, colonyID, sharedItemID strin
 	}
 	delete(r.sharedItems, sharedItemID)
 	return nil
+}
+
+func (r *MemoryRepository) CreateSession(session Session) (Session, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if session.ID == "" {
+		session.ID = newID()
+	}
+	if session.CreatedAt.IsZero() {
+		session.CreatedAt = time.Now().UTC()
+	}
+	if session.UpdatedAt.IsZero() {
+		session.UpdatedAt = session.CreatedAt
+	}
+	if session.Token == "" {
+		session.Token = newID()
+	}
+	r.sessions[session.Token] = session
+	return session, nil
+}
+
+func (r *MemoryRepository) GetSessionByToken(token string) (Session, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	session, ok := r.sessions[token]
+	if !ok {
+		return Session{}, ErrNotFound
+	}
+	return session, nil
+}
+
+func (r *MemoryRepository) DeleteSession(token string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.sessions[token]; !ok {
+		return ErrNotFound
+	}
+	delete(r.sessions, token)
+	return nil
+}
+
+func (r *MemoryRepository) CreateAnalysisJob(job AnalysisJob) (AnalysisJob, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if job.ID == "" {
+		job.ID = newID()
+	}
+	if job.Status == "" {
+		job.Status = "queued"
+	}
+	if job.CreatedAt.IsZero() {
+		job.CreatedAt = time.Now().UTC()
+	}
+	if job.UpdatedAt.IsZero() {
+		job.UpdatedAt = job.CreatedAt
+	}
+	r.analysisJobs[job.ID] = job
+	return job, nil
+}
+
+func (r *MemoryRepository) GetAnalysisJob(jobID string) (AnalysisJob, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	job, ok := r.analysisJobs[jobID]
+	if !ok {
+		return AnalysisJob{}, ErrNotFound
+	}
+	return job, nil
+}
+
+func (r *MemoryRepository) ListAnalysisJobs(userID string) ([]AnalysisJob, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	items := make([]AnalysisJob, 0)
+	for _, job := range r.analysisJobs {
+		if job.UserID == userID {
+			items = append(items, job)
+		}
+	}
+	return items, nil
+}
+
+func (r *MemoryRepository) UpdateAnalysisJob(job AnalysisJob) (AnalysisJob, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if job.UpdatedAt.IsZero() {
+		job.UpdatedAt = time.Now().UTC()
+	}
+	r.analysisJobs[job.ID] = job
+	return job, nil
 }
 
 func newID() string {

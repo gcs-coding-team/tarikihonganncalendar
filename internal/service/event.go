@@ -32,6 +32,9 @@ func NewEventService(repo repository.EventRepository) *EventService {
 }
 
 func (s *EventService) Create(userID string, input CreateEventInput) (repository.Event, error) {
+	if userID == "" {
+		return repository.Event{}, repository.ErrForbidden
+	}
 	if input.Title == "" {
 		return repository.Event{}, repository.ErrConflict
 	}

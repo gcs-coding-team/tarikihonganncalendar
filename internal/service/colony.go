@@ -28,6 +28,9 @@ func NewColonyService(repo repository.ColonyRepository) *ColonyService {
 }
 
 func (s *ColonyService) Create(userID string, input CreateColonyInput) (repository.Colony, error) {
+	if userID == "" {
+		return repository.Colony{}, repository.ErrForbidden
+	}
 	colony := repository.Colony{
 		Name:        input.Name,
 		Description: input.Description,
