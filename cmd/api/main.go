@@ -18,6 +18,7 @@ import (
 	"github.com/zatunohito/tarikihonganncalendar/internal/httpapi/response"
 	"github.com/zatunohito/tarikihonganncalendar/internal/repository/postgres"
 	"github.com/zatunohito/tarikihonganncalendar/internal/service/auth"
+	"github.com/zatunohito/tarikihonganncalendar/internal/service/print"
 	"github.com/zatunohito/tarikihonganncalendar/internal/service/task"
 	"github.com/zatunohito/tarikihonganncalendar/internal/service/upload"
 	"github.com/zatunohito/tarikihonganncalendar/internal/storage"
@@ -62,6 +63,9 @@ func main() {
 	})
 	uploadH := handler.NewUploadHandler(uploadSvc)
 
+	printSvc := print.NewService(printRepo, storageClient)
+	printH := handler.NewPrintHandler(printSvc)
+
 	r := chi.NewRouter()
 
 	r.Use(middleware.Recoverer)
@@ -88,6 +92,9 @@ func main() {
 			r.Patch("/tasks/{taskId}", taskH.Update)
 			r.Delete("/tasks/{taskId}", taskH.Delete)
 			r.Post("/uploads", uploadH.Create)
+			r.Get("/prints", printH.List)
+			r.Get("/prints/{printId}", printH.Get)
+			r.Delete("/prints/{printId}", printH.Delete)
 		})
 	})
 
