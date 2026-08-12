@@ -52,6 +52,44 @@ func (h *Handler) registerAnalysisRoutes(svc *service.AnalysisService) {
 		}
 	}))
 
+	// The stored handouts. GET /v1/prints lists them; GET /v1/prints/{id}/image
+	// returns the image itself, so someone can see what a set of dates came from.
+	h.mux.HandleFunc("/v1/prints", h.withAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeJSON(w, http.StatusMethodNotAllowed, errorBody("METHOD_NOT_ALLOWED"))
+			return
+		}
+		prints, err := svc.Prints(h.resolveUserID(r))
+		if err != nil {
+			writeRepoError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"data": prints})
+	}))
+
+	h.mux.HandleFunc("/v1/prints/", h.withAuth(func(w http.ResponseWriter, r *http.Request) {
+		rest := strings.Trim(strings.TrimPrefix(r.URL.Path, "/v1/prints/"), "/")
+		parts := strings.Split(rest, "/")
+		if len(parts) != 2 || parts[1] != "image" || r.Method != http.MethodGet {
+			writeJSON(w, http.StatusNotFound, errorBody("NOT_FOUND"))
+			return
+		}
+		print, data, err := svc.Image(r.Context(), h.resolveUserID(r), parts[0])
+		if err != nil {
+			writeRepoError(w, err)
+			return
+		}
+		contentType := print.ContentType
+		if contentType == "" {
+			contentType = "application/octet-stream"
+		}
+		w.Header().Set("Content-Type", contentType)
+		// Private: another account's handout must never be served from a cache.
+		w.Header().Set("Cache-Control", "private, max-age=3600")
+		w.WriteHeader(http.StatusOK)
+		w.Write(data)
+	}))
+
 	h.mux.HandleFunc("/v1/uploads/jobs/", h.withAuth(func(w http.ResponseWriter, r *http.Request) {
 		rest := strings.Trim(strings.TrimPrefix(r.URL.Path, "/v1/uploads/jobs/"), "/")
 		parts := strings.Split(rest, "/")

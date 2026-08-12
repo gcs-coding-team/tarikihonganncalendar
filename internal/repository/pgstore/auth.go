@@ -184,3 +184,58 @@ func (s *Store) ListCandidates(jobID string) ([]repository.Candidate, error) {
 	}
 	return items, mapErr(rows.Err())
 }
+
+/* ---------- password resets ---------- */
+
+func (s *Store) CreatePasswordReset(reset repository.PasswordReset) (repository.PasswordReset, error) {
+	if reset.ID == "" {
+		reset.ID = repository.NewID()
+	}
+	now := time.Now().UTC()
+	if reset.ExpiresAt.IsZero() {
+		reset.ExpiresAt = now.Add(repository.PasswordResetTTL)
+	}
+	if _, err := s.pool.Exec(ctxb(),
+		`INSERT INTO password_resets (id, user_id, token_hash, expires_at, created_at)
+		 VALUES ($1,$2,$3,$4,$5)`,
+		reset.ID, reset.UserID, repository.HashToken(reset.Token), reset.ExpiresAt, now); err != nil {
+		return repository.PasswordReset{}, mapErr(err)
+	}
+	reset.CreatedAt = now
+	return reset, nil
+}
+
+// ConsumePasswordReset claims the token and marks it spent in a single
+// statement. Checking and then updating would leave a gap in which the same
+// link could be redeemed twice.
+func (s *Store) ConsumePasswordReset(token string) (repository.PasswordReset, error) {
+	var out repository.PasswordReset
+	err := s.pool.QueryRow(ctxb(),
+		`UPDATE password_resets SET used_at = now()
+		 WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now()
+		 RETURNING id, user_id, expires_at, created_at`,
+		repository.HashToken(token)).
+		Scan(&out.ID, &out.UserID, &out.ExpiresAt, &out.CreatedAt)
+	if err != nil {
+		return repository.PasswordReset{}, mapErr(err)
+	}
+	return out, nil
+}
+
+func (s *Store) UpdateUserPassword(userID, passwordHash string) error {
+	tag, err := s.pool.Exec(ctxb(),
+		`UPDATE users SET password_hash = $1, updated_at = now() WHERE id = $2`,
+		passwordHash, userID)
+	if err != nil {
+		return mapErr(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return repository.ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) DeleteSessionsForUser(userID string) error {
+	_, err := s.pool.Exec(ctxb(), `DELETE FROM sessions WHERE user_id = $1`, userID)
+	return mapErr(err)
+}

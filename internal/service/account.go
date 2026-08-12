@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"errors"
+	"log"
 	"strings"
 
 	"golang.org/x/crypto/argon2"
@@ -21,6 +22,7 @@ import (
 var (
 	ErrInvalidCredentials = errors.New("invalid email or password")
 	ErrEmailTaken         = errors.New("email already registered")
+	ErrInvalidResetToken  = errors.New("reset link is invalid or has expired")
 )
 
 type AccountService struct {
@@ -134,4 +136,57 @@ func verifyPassword(stored, password string) bool {
 	// Constant time, so a wrong password cannot be narrowed down by how long
 	// the comparison took.
 	return subtle.ConstantTimeCompare(got, wantBytes) == 1
+}
+
+// Delivery hands a reset link to its owner. There is no mailer wired up here,
+// so the default writes the token to the log: enough to run the flow end to end
+// in development, and obvious enough in production logs that nobody mistakes it
+// for a finished feature.
+type Delivery interface {
+	SendPasswordReset(email, token string) error
+}
+
+type LogDelivery struct{}
+
+func (LogDelivery) SendPasswordReset(email, token string) error {
+	log.Printf("password reset for %s: token=%s (no mailer configured)", email, token)
+	return nil
+}
+
+// RequestPasswordReset always reports success, whether or not the address is
+// registered. Saying "no such account" here would turn the endpoint into a way
+// to find out who has one.
+func (s *AccountService) RequestPasswordReset(email string, deliver Delivery) error {
+	user, err := s.repo.GetUserByEmail(normalizeEmail(email))
+	if err != nil {
+		return nil
+	}
+	reset, err := s.repo.CreatePasswordReset(repository.PasswordReset{
+		UserID: user.ID,
+		Token:  newToken(),
+	})
+	if err != nil {
+		return err
+	}
+	if deliver == nil {
+		deliver = LogDelivery{}
+	}
+	return deliver.SendPasswordReset(user.Email, reset.Token)
+}
+
+// ResetPassword spends the token and sets the new password. Every existing
+// session is dropped: someone resetting a password may be doing it precisely
+// because somebody else is signed in as them.
+func (s *AccountService) ResetPassword(token, password string) error {
+	if len(password) < 8 {
+		return repository.ValidationError("password must be at least 8 characters")
+	}
+	reset, err := s.repo.ConsumePasswordReset(token)
+	if err != nil {
+		return ErrInvalidResetToken
+	}
+	if err := s.repo.UpdateUserPassword(reset.UserID, hashPassword(password)); err != nil {
+		return err
+	}
+	return s.repo.DeleteSessionsForUser(reset.UserID)
 }

@@ -181,9 +181,12 @@ func (s *Store) LeaveColony(userID, colonyID string) error {
 }
 
 func (s *Store) ListColonyMembers(colonyID string) ([]repository.ColonyMember, error) {
+	// LEFT JOIN, so a member without a user record still appears; their id
+	// stands in for the name rather than the row vanishing.
 	rows, err := s.pool.Query(ctxb(),
-		`SELECT colony_id, user_id, role, joined_at FROM colony_members
-		 WHERE colony_id=$1 ORDER BY joined_at, user_id`, colonyID)
+		`SELECT m.colony_id, m.user_id, COALESCE(NULLIF(u.display_name, ''), m.user_id), m.role, m.joined_at
+		 FROM colony_members m LEFT JOIN users u ON u.id = m.user_id
+		 WHERE m.colony_id=$1 ORDER BY m.joined_at, m.user_id`, colonyID)
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -191,7 +194,7 @@ func (s *Store) ListColonyMembers(colonyID string) ([]repository.ColonyMember, e
 	items := make([]repository.ColonyMember, 0)
 	for rows.Next() {
 		var m repository.ColonyMember
-		if err := rows.Scan(&m.ColonyID, &m.UserID, &m.Role, &m.JoinedAt); err != nil {
+		if err := rows.Scan(&m.ColonyID, &m.UserID, &m.DisplayName, &m.Role, &m.JoinedAt); err != nil {
 			return nil, mapErr(err)
 		}
 		items = append(items, m)

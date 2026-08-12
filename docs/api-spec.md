@@ -34,7 +34,9 @@ Authorization: Bearer 4f3c...（64桁の16進）
 パスワードは argon2id で、セッショントークンは SHA-256 で保存されます。
 どちらも平文では保存されません。
 
-`X-User-ID` ヘッダーの直指定も当面は通ります（開発用）。本番では塞いでください。
+`X-User-ID` ヘッダーの直指定と、パスワード無しの `POST /v1/auth/sessions` は
+**既定で無効**です。`ALLOW_DEV_AUTH=true` を立てたときだけ通ります。
+どちらもパスワードを迂回できるので、開発機以外では立てないでください。
 
 ---
 
@@ -121,6 +123,28 @@ Response `204`: セッションを破棄
 ### `GET /v1/auth/me` — 自分を引く
 
 Response `200`: `{ "data": { "id": "...", "displayName": "..." } }`
+
+### `POST /v1/auth/password-reset` — 再設定を申し込む
+
+Request: `{ "email": "..." }`
+
+Response `204`: **登録の有無にかかわらず 204 を返します。**
+区別できると、誰がここにアカウントを持っているか調べる道具になるためです。
+
+再設定トークンは `Delivery` 経由で本人に渡します。メール送信は未実装で、
+既定ではログに出力されます（開発用。本番では実装を差し替えてください）。
+
+### `POST /v1/auth/password-reset/confirm` — 新しいパスワードを設定する
+
+Request: `{ "token": "...", "password": "..." }`
+
+Response `204`: 成功。**そのユーザーの既存セッションは全て破棄されます**
+（再設定する人は、他人に使われているから再設定している可能性があるため）。
+
+- `400 INVALID_TOKEN` — トークンが不正・期限切れ・使用済み
+- `400 VALIDATION_ERROR` — パスワードが8文字未満
+
+トークンは30分で失効し、一度しか使えません。保存はハッシュのみです。
 
 ### `POST /v1/auth/sessions` — セッション作成（旧・開発用）
 
@@ -410,8 +434,8 @@ Response `200`:
 ```json
 {
   "data": [
-    { "colonyId": "...", "userId": "user-1", "role": "OWNER", "joinedAt": "..." },
-    { "colonyId": "...", "userId": "user-2", "role": "MEMBER", "joinedAt": "..." }
+    { "colonyId": "...", "userId": "user-1", "displayName": "ザビエル", "role": "OWNER", "joinedAt": "..." },
+    { "colonyId": "...", "userId": "user-2", "displayName": "べつの人", "role": "MEMBER", "joinedAt": "..." }
   ]
 }
 ```
@@ -585,6 +609,16 @@ Response `200`:
 - `413` — 10MB 超
 
 ### `GET /v1/uploads/jobs/{jobId}/candidates` — 候補一覧
+
+### `GET /v1/prints` — 読み取ったプリント一覧
+
+解析に送った画像は保存され、あとから見返せます。
+
+### `GET /v1/prints/{printId}/image` — 画像を取り出す
+
+Response `200`: 画像そのもの（`Content-Type` は登録時のもの、`Cache-Control: private`）
+
+`403` — 他人のプリント / `404` — 保存されていない（`BLOB_DIR` が空のとき）
 
 ### `GET /v1/uploads/jobs/{jobId}` — ジョブ取得
 

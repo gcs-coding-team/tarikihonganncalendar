@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -18,7 +19,47 @@ type colonyBody struct {
 	} `json:"data"`
 }
 
-func call(t *testing.T, mux http.Handler, method, path, userID, body string) *httptest.ResponseRecorder {
+// Tokens are cached per handler so repeated calls as the same actor stay the
+// same account. Registering is how a test gets in at all now — the X-User-ID
+// shortcut it used to lean on is off by default, which is the point of it.
+//
+// The handler itself is the key. Keying on its address instead let a collected
+// handler's tokens be handed to a new one that landed on the same address,
+// which failed only when the whole package ran at once.
+var testTokens = map[*Handler]map[string]string{}
+
+func tokenFor(t *testing.T, mux *Handler, actor string) string {
+	t.Helper()
+	if tok, ok := testTokens[mux][actor]; ok {
+		return tok
+	}
+	body := fmt.Sprintf(`{"email":%q,"password":"testpassword","displayName":%q}`,
+		actor+"@test.local", actor)
+	req := httptest.NewRequest(http.MethodPost, "/v1/auth/register", bytes.NewReader([]byte(body)))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("register %s: got %d body=%s", actor, rr.Code, rr.Body.String())
+	}
+	var out struct {
+		Data struct {
+			Token string `json:"token"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode register: %v", err)
+	}
+	if testTokens[mux] == nil {
+		testTokens[mux] = map[string]string{}
+	}
+	testTokens[mux][actor] = out.Data.Token
+	return out.Data.Token
+}
+
+// call makes a request as the named actor, registering them on first use. An
+// empty actor sends no credentials at all.
+func call(t *testing.T, mux *Handler, method, path, actor, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	var req *http.Request
 	if body == "" {
@@ -27,15 +68,15 @@ func call(t *testing.T, mux http.Handler, method, path, userID, body string) *ht
 		req = httptest.NewRequest(method, path, bytes.NewReader([]byte(body)))
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if userID != "" {
-		req.Header.Set("X-User-ID", userID)
+	if actor != "" {
+		req.Header.Set("Authorization", "Bearer "+tokenFor(t, mux, actor))
 	}
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 	return rr
 }
 
-func newColony(t *testing.T, mux http.Handler, userID, name string) colonyBody {
+func newColony(t *testing.T, mux *Handler, userID, name string) colonyBody {
 	t.Helper()
 	rr := call(t, mux, http.MethodPost, "/v1/colonies", userID, `{"name":"`+name+`"}`)
 	if rr.Code != http.StatusCreated {

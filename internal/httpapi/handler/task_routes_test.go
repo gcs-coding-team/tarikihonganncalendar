@@ -28,7 +28,7 @@ func decodeTask(t *testing.T, raw []byte) taskBody {
 	return out
 }
 
-func newProject(t *testing.T, mux http.Handler, userID, name string) string {
+func newProject(t *testing.T, mux *Handler, userID, name string) string {
 	t.Helper()
 	rr := call(t, mux, http.MethodPost, "/v1/projects", userID, `{"name":"`+name+`"}`)
 	if rr.Code != http.StatusCreated {

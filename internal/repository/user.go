@@ -51,12 +51,16 @@ type userStore struct {
 	userMu     sync.RWMutex
 	users      map[string]User
 	candidates map[string][]Candidate
+	resets     map[string]PasswordReset
+	prints     map[string]Print
 }
 
 func newUserStore() userStore {
 	return userStore{
 		users:      make(map[string]User),
 		candidates: make(map[string][]Candidate),
+		resets:     make(map[string]PasswordReset),
+		prints:     make(map[string]Print),
 	}
 }
 
