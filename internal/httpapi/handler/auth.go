@@ -5,9 +5,9 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/zatunohito/tarikihonganncalendar/internal/httpapi/middleware"
-	"github.com/zatunohito/tarikihonganncalendar/internal/httpapi/response"
-	"github.com/zatunohito/tarikihonganncalendar/internal/service/auth"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/httpapi/middleware"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/httpapi/response"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/service/auth"
 )
 
 type AuthHandler struct {

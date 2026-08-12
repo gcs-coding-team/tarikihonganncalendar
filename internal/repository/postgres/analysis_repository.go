@@ -6,7 +6,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/zatunohito/tarikihonganncalendar/internal/domain"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/domain"
 )
 
 type AnalysisJobRepository struct {

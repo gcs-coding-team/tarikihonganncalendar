@@ -9,13 +9,13 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/zatunohito/tarikihonganncalendar/internal/domain"
-	"github.com/zatunohito/tarikihonganncalendar/internal/repository"
-	"github.com/zatunohito/tarikihonganncalendar/internal/storage"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/domain"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/repository/dbrepo"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/storage"
 )
 
 type Service struct {
-	prints  repository.PrintRepository
+	prints  dbrepo.PrintRepository
 	storage storage.Client
 	cfg     Config
 }
@@ -25,7 +25,7 @@ type Config struct {
 	MaxUploadBytes  int64
 }
 
-func NewService(prints repository.PrintRepository, s storage.Client, cfg Config) *Service {
+func NewService(prints dbrepo.PrintRepository, s storage.Client, cfg Config) *Service {
 	return &Service{prints: prints, storage: s, cfg: cfg}
 }
 

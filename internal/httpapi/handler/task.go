@@ -9,11 +9,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/zatunohito/tarikihonganncalendar/internal/domain"
-	"github.com/zatunohito/tarikihonganncalendar/internal/httpapi/middleware"
-	"github.com/zatunohito/tarikihonganncalendar/internal/httpapi/response"
-	"github.com/zatunohito/tarikihonganncalendar/internal/repository"
-	"github.com/zatunohito/tarikihonganncalendar/internal/service/task"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/domain"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/httpapi/middleware"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/httpapi/response"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/repository/dbrepo"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/service/task"
 )
 
 type TaskHandler struct {
@@ -88,7 +88,7 @@ func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	tasks, nextCursor, err := h.svc.List(r.Context(), userID, repository.ListTasksFilter{
+	tasks, nextCursor, err := h.svc.List(r.Context(), userID, dbrepo.ListTasksFilter{
 		Cursor:       cursor,
 		Limit:        limit,
 		UpdatedAfter: updatedAfter,

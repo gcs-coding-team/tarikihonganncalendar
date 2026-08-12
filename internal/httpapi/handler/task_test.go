@@ -10,10 +10,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/zatunohito/tarikihonganncalendar/internal/domain"
-	"github.com/zatunohito/tarikihonganncalendar/internal/httpapi/middleware"
-	"github.com/zatunohito/tarikihonganncalendar/internal/repository"
-	"github.com/zatunohito/tarikihonganncalendar/internal/service/task"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/domain"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/httpapi/middleware"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/repository/dbrepo"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/service/task"
 )
 
 func withChiURLParam(r *http.Request, key, value string) *http.Request {
@@ -36,7 +36,7 @@ func (m *mockTaskRepo) FindByID(_ context.Context, id string) (*domain.Task, err
 	return m.tasks[id], nil
 }
 
-func (m *mockTaskRepo) FindByUserID(_ context.Context, userID string, filter repository.ListTasksFilter) ([]*domain.Task, string, error) {
+func (m *mockTaskRepo) FindByUserID(_ context.Context, userID string, filter dbrepo.ListTasksFilter) ([]*domain.Task, string, error) {
 	var result []*domain.Task
 	for _, t := range m.tasks {
 		if t.UserID == userID {

@@ -4,19 +4,19 @@ import (
 	"context"
 	"errors"
 
-	"github.com/zatunohito/tarikihonganncalendar/internal/domain"
-	"github.com/zatunohito/tarikihonganncalendar/internal/repository"
-	"github.com/zatunohito/tarikihonganncalendar/internal/storage"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/domain"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/repository/dbrepo"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/storage"
 )
 
 var ErrNotFound = errors.New("print not found")
 
 type Service struct {
-	prints  repository.PrintRepository
+	prints  dbrepo.PrintRepository
 	storage storage.Client
 }
 
-func NewService(prints repository.PrintRepository, s storage.Client) *Service {
+func NewService(prints dbrepo.PrintRepository, s storage.Client) *Service {
 	return &Service{prints: prints, storage: s}
 }
 

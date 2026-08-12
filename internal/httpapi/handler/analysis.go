@@ -7,9 +7,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/zatunohito/tarikihonganncalendar/internal/httpapi/middleware"
-	"github.com/zatunohito/tarikihonganncalendar/internal/httpapi/response"
-	"github.com/zatunohito/tarikihonganncalendar/internal/service/analysis"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/httpapi/middleware"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/httpapi/response"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/service/analysis"
 )
 
 type AnalysisHandler struct {

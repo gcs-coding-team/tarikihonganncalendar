@@ -7,8 +7,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/zatunohito/tarikihonganncalendar/internal/domain"
-	"github.com/zatunohito/tarikihonganncalendar/internal/repository"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/domain"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/repository/dbrepo"
 )
 
 var (
@@ -18,10 +18,10 @@ var (
 )
 
 type Service struct {
-	tasks repository.TaskRepository
+	tasks dbrepo.TaskRepository
 }
 
-func NewService(tasks repository.TaskRepository) *Service {
+func NewService(tasks dbrepo.TaskRepository) *Service {
 	return &Service{tasks: tasks}
 }
 
@@ -79,7 +79,7 @@ func (s *Service) GetByID(ctx context.Context, taskID, userID string) (*domain.T
 	return task, nil
 }
 
-func (s *Service) List(ctx context.Context, userID string, filter repository.ListTasksFilter) ([]*domain.Task, string, error) {
+func (s *Service) List(ctx context.Context, userID string, filter dbrepo.ListTasksFilter) ([]*domain.Task, string, error) {
 	return s.tasks.FindByUserID(ctx, userID, filter)
 }
 

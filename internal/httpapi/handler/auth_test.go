@@ -8,9 +8,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/zatunohito/tarikihonganncalendar/internal/domain"
-	"github.com/zatunohito/tarikihonganncalendar/internal/httpapi/middleware"
-	"github.com/zatunohito/tarikihonganncalendar/internal/service/auth"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/domain"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/httpapi/middleware"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/service/auth"
 )
 
 type mockUserRepoForHandler struct {

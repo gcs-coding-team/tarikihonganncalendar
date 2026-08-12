@@ -12,17 +12,17 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/zatunohito/tarikihonganncalendar/internal/config"
-	"github.com/zatunohito/tarikihonganncalendar/internal/httpapi/handler"
-	"github.com/zatunohito/tarikihonganncalendar/internal/httpapi/middleware"
-	"github.com/zatunohito/tarikihonganncalendar/internal/httpapi/response"
-	"github.com/zatunohito/tarikihonganncalendar/internal/repository/postgres"
-	"github.com/zatunohito/tarikihonganncalendar/internal/service/auth"
-	"github.com/zatunohito/tarikihonganncalendar/internal/service/analysis"
-	"github.com/zatunohito/tarikihonganncalendar/internal/service/print"
-	"github.com/zatunohito/tarikihonganncalendar/internal/service/task"
-	"github.com/zatunohito/tarikihonganncalendar/internal/service/upload"
-	"github.com/zatunohito/tarikihonganncalendar/internal/storage"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/config"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/httpapi/handler"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/httpapi/middleware"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/httpapi/response"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/repository/postgres"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/service/auth"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/service/analysis"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/service/print"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/service/task"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/service/upload"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/storage"
 )
 
 func main() {

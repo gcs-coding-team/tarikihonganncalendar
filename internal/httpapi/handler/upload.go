@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/zatunohito/tarikihonganncalendar/internal/httpapi/middleware"
-	"github.com/zatunohito/tarikihonganncalendar/internal/httpapi/response"
-	"github.com/zatunohito/tarikihonganncalendar/internal/service/upload"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/httpapi/middleware"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/httpapi/response"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/service/upload"
 )
 
 type UploadHandler struct {

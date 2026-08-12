@@ -7,8 +7,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/zatunohito/tarikihonganncalendar/internal/domain"
-	"github.com/zatunohito/tarikihonganncalendar/internal/repository"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/domain"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/repository/dbrepo"
 )
 
 var (
@@ -18,15 +18,15 @@ var (
 )
 
 type Service struct {
-	jobs    repository.AnalysisJobRepository
-	results repository.AnalysisResultRepository
-	prints  repository.PrintRepository
+	jobs    dbrepo.AnalysisJobRepository
+	results dbrepo.AnalysisResultRepository
+	prints  dbrepo.PrintRepository
 }
 
 func NewService(
-	jobs repository.AnalysisJobRepository,
-	results repository.AnalysisResultRepository,
-	prints repository.PrintRepository,
+	jobs dbrepo.AnalysisJobRepository,
+	results dbrepo.AnalysisResultRepository,
+	prints dbrepo.PrintRepository,
 ) *Service {
 	return &Service{jobs: jobs, results: results, prints: prints}
 }
