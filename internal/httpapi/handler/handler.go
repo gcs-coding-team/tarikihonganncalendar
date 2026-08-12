@@ -180,11 +180,13 @@ func (h *Handler) listEvents(w http.ResponseWriter, r *http.Request, svc *servic
 func (h *Handler) createEvent(w http.ResponseWriter, r *http.Request, svc *service.EventService) {
 	userID := h.resolveUserID(r)
 	var input struct {
-		Title       string `json:"title"`
-		Description string `json:"description"`
-		StartAt     string `json:"startAt"`
-		EndAt       string `json:"endAt"`
-		AllDay      bool   `json:"allDay"`
+		Title       string             `json:"title"`
+		Description string             `json:"description"`
+		StartAt     string             `json:"startAt"`
+		EndAt       string             `json:"endAt"`
+		AllDay      bool               `json:"allDay"`
+		Repeat      *repository.Repeat `json:"repeat"`
+		ExDates     []string           `json:"exdates"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		if err.Error() == "EOF" {
@@ -204,7 +206,11 @@ func (h *Handler) createEvent(w http.ResponseWriter, r *http.Request, svc *servi
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{"code": "VALIDATION_ERROR"}})
 		return
 	}
-	item, err := svc.Create(userID, service.CreateEventInput{Title: input.Title, Description: input.Description, StartAt: startAt, EndAt: endAt, AllDay: input.AllDay})
+	item, err := svc.Create(userID, service.CreateEventInput{
+		Title: input.Title, Description: input.Description,
+		StartAt: startAt, EndAt: endAt, AllDay: input.AllDay,
+		Repeat: input.Repeat, ExDates: input.ExDates,
+	})
 	if err != nil {
 		if repository.IsValidationError(err) {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{"code": "VALIDATION_ERROR"}})
@@ -236,7 +242,11 @@ func (h *Handler) updateEvent(w http.ResponseWriter, r *http.Request, svc *servi
 		StartAt     *string `json:"startAt"`
 		EndAt       *string `json:"endAt"`
 		AllDay      *bool   `json:"allDay"`
-		Version     int     `json:"version"`
+		// Raw, so that an absent "repeat" (leave the rule alone) stays
+		// distinguishable from an explicit null (drop it).
+		Repeat  json.RawMessage `json:"repeat"`
+		ExDates *[]string       `json:"exdates"`
+		Version int             `json:"version"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		if err.Error() == "EOF" {
@@ -264,8 +274,25 @@ func (h *Handler) updateEvent(w http.ResponseWriter, r *http.Request, svc *servi
 		}
 		endAt = &parsed
 	}
-	item, err := svc.Update(userID, eventID, service.UpdateEventInput{Title: input.Title, Description: input.Description, StartAt: startAt, EndAt: endAt, AllDay: input.AllDay, Version: input.Version})
+	var repeat **repository.Repeat
+	if len(input.Repeat) > 0 {
+		var parsed *repository.Repeat
+		if err := json.Unmarshal(input.Repeat, &parsed); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{"code": "VALIDATION_ERROR"}})
+			return
+		}
+		repeat = &parsed
+	}
+	item, err := svc.Update(userID, eventID, service.UpdateEventInput{
+		Title: input.Title, Description: input.Description,
+		StartAt: startAt, EndAt: endAt, AllDay: input.AllDay,
+		Repeat: repeat, ExDates: input.ExDates, Version: input.Version,
+	})
 	if err != nil {
+		if repository.IsValidationError(err) {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{"code": "VALIDATION_ERROR"}})
+			return
+		}
 		writeJSON(w, http.StatusConflict, map[string]any{"error": map[string]any{"code": "CONFLICT"}})
 		return
 	}
@@ -732,7 +759,18 @@ func parseTime(value string) (time.Time, error) {
 }
 
 func serializeEvent(item repository.Event) map[string]any {
-	return map[string]any{"id": item.ID, "title": item.Title, "description": item.Description, "startAt": item.StartAt.Format(time.RFC3339), "endAt": item.EndAt.Format(time.RFC3339), "allDay": item.AllDay, "version": item.Version}
+	out := map[string]any{"id": item.ID, "title": item.Title, "description": item.Description, "startAt": item.StartAt.Format(time.RFC3339), "endAt": item.EndAt.Format(time.RFC3339), "allDay": item.AllDay, "version": item.Version}
+	if item.Repeat != nil {
+		out["repeat"] = item.Repeat
+	}
+	// Always present, so a client can tell an event with no dropped days from
+	// one whose exceptions it simply has not loaded.
+	if item.ExDates == nil {
+		out["exdates"] = []string{}
+	} else {
+		out["exdates"] = item.ExDates
+	}
+	return out
 }
 
 func serializeEvents(items []repository.Event) []map[string]any {

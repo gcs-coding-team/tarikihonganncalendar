@@ -24,6 +24,15 @@ func IsValidationError(err error) bool {
 	return errors.Is(err, errValidation)
 }
 
+// Repeat describes a recurring event. Freq is daily, weekly or monthly; the
+// series starts on the event's StartAt and runs until Until, or forever when
+// Until is empty. Dates are held as YYYY-MM-DD because a recurrence rule is
+// about calendar days, not instants.
+type Repeat struct {
+	Freq  string `json:"freq"`
+	Until string `json:"until,omitempty"`
+}
+
 type Event struct {
 	ID          string    `json:"id"`
 	UserID      string    `json:"userId"`
@@ -32,9 +41,14 @@ type Event struct {
 	StartAt     time.Time `json:"startAt"`
 	EndAt       time.Time `json:"endAt"`
 	AllDay      bool      `json:"allDay"`
-	Version     int       `json:"version"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	// Repeat is nil for a one-off event. Expanding the series is left to the
+	// caller; what is stored here is the rule and the days dropped from it.
+	Repeat  *Repeat  `json:"repeat,omitempty"`
+	ExDates []string `json:"exdates,omitempty"`
+
+	Version   int       `json:"version"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 type TimetableEntry struct {
