@@ -404,6 +404,12 @@ func (h *Handler) handleColonySubroutes(w http.ResponseWriter, r *http.Request, 
 
 	if len(parts) == 1 {
 		id := parts[0]
+		// /v1/colonies/join carries the invite code alone, with no colony ID —
+		// that is the whole point, since the invitee has never seen the ID.
+		if id == "join" && r.Method == http.MethodPost {
+			h.joinColonyByCode(w, r, svc)
+			return
+		}
 		if id == "members" || id == "feed" || id == "join" || id == "leave" {
 			writeJSON(w, http.StatusNotFound, map[string]any{"error": map[string]any{"code": "NOT_FOUND"}})
 			return
@@ -533,6 +539,34 @@ func (h *Handler) joinColony(w http.ResponseWriter, r *http.Request, svc *servic
 	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"ok": true}})
 }
 
+// joinColonyByCode serves POST /v1/colonies/join, where the body carries only
+// the invite code. It returns the colony so the caller learns its ID and name.
+func (h *Handler) joinColonyByCode(w http.ResponseWriter, r *http.Request, svc *service.ColonyService) {
+	userID := h.resolveUserID(r)
+	var input struct {
+		InviteCode string `json:"inviteCode"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{"code": "VALIDATION_ERROR"}})
+		return
+	}
+	colony, err := svc.JoinByInviteCode(userID, input.InviteCode)
+	if err != nil {
+		switch {
+		case err == repository.ErrDuplicate:
+			writeJSON(w, http.StatusConflict, map[string]any{"error": map[string]any{"code": "CONFLICT"}})
+		case err == repository.ErrForbidden:
+			writeJSON(w, http.StatusForbidden, map[string]any{"error": map[string]any{"code": "FORBIDDEN"}})
+		case repository.IsValidationError(err):
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{"code": "VALIDATION_ERROR"}})
+		default:
+			writeJSON(w, http.StatusNotFound, map[string]any{"error": map[string]any{"code": "NOT_FOUND"}})
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": serializeColony(colony)})
+}
+
 func (h *Handler) leaveColony(w http.ResponseWriter, r *http.Request, svc *service.ColonyService, colonyID string) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": map[string]any{"code": "METHOD_NOT_ALLOWED"}})
@@ -555,14 +589,19 @@ func (h *Handler) handleSharedItems(w http.ResponseWriter, r *http.Request, svc 
 	switch r.Method {
 	case http.MethodPost:
 		var input struct {
-			SourceType string `json:"sourceType"`
-			SourceID   string `json:"sourceId"`
+			SourceType    string `json:"sourceType"`
+			SourceID      string `json:"sourceId"`
+			TitleSnapshot string `json:"titleSnapshot"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{"code": "VALIDATION_ERROR"}})
 			return
 		}
-		item, err := svc.CreateSharedItem(userID, colonyID, service.CreateSharedItemInput{SourceType: input.SourceType, SourceID: input.SourceID})
+		item, err := svc.CreateSharedItem(userID, colonyID, service.CreateSharedItemInput{
+			SourceType:    input.SourceType,
+			SourceID:      input.SourceID,
+			TitleSnapshot: input.TitleSnapshot,
+		})
 		if err != nil {
 			if err == repository.ErrDuplicate {
 				writeJSON(w, http.StatusConflict, map[string]any{"error": map[string]any{"code": "CONFLICT"}})

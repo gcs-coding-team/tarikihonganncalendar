@@ -19,8 +19,9 @@ type UpdateColonyInput struct {
 }
 
 type CreateSharedItemInput struct {
-	SourceType string
-	SourceID   string
+	SourceType    string
+	SourceID      string
+	TitleSnapshot string
 }
 
 func NewColonyService(repo repository.ColonyRepository) *ColonyService {
@@ -69,6 +70,36 @@ func (s *ColonyService) Join(userID, colonyID, inviteCode string) (repository.Co
 	return s.repo.JoinColony(userID, colonyID, inviteCode)
 }
 
+// JoinByInviteCode takes the code on its own. Someone being invited only ever
+// receives the code, never the colony ID, so requiring the ID to join made the
+// code useless by itself.
+func (s *ColonyService) JoinByInviteCode(userID, inviteCode string) (repository.Colony, error) {
+	if userID == "" {
+		return repository.Colony{}, repository.ErrForbidden
+	}
+	if inviteCode == "" {
+		return repository.Colony{}, repository.ValidationError("inviteCode is required")
+	}
+	colony, err := s.repo.FindColonyByInviteCode(inviteCode)
+	if err != nil {
+		return repository.Colony{}, err
+	}
+	for _, m := range s.mustMembers(colony.ID) {
+		if m.UserID == userID {
+			return repository.Colony{}, repository.ErrDuplicate
+		}
+	}
+	return s.repo.JoinColony(userID, colony.ID, inviteCode)
+}
+
+func (s *ColonyService) mustMembers(colonyID string) []repository.ColonyMember {
+	members, err := s.repo.ListColonyMembers(colonyID)
+	if err != nil {
+		return nil
+	}
+	return members
+}
+
 func (s *ColonyService) Leave(userID, colonyID string) error {
 	return s.repo.LeaveColony(userID, colonyID)
 }
@@ -83,10 +114,11 @@ func (s *ColonyService) CreateSharedItem(userID, colonyID string, input CreateSh
 		return repository.SharedItem{}, err
 	}
 	item := repository.SharedItem{
-		ColonyID:   colonyID,
-		SourceType: input.SourceType,
-		SourceID:   input.SourceID,
-		CreatedBy:  userID,
+		ColonyID:      colonyID,
+		SourceType:    input.SourceType,
+		SourceID:      input.SourceID,
+		TitleSnapshot: input.TitleSnapshot,
+		CreatedBy:     userID,
 	}
 	return s.repo.CreateSharedItem(item)
 }

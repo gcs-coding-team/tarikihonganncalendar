@@ -100,6 +100,7 @@ type ColonyRepository interface {
 	GetColony(userID, colonyID string) (Colony, error)
 	UpdateColony(colony Colony) (Colony, error)
 	DeleteColony(userID, colonyID string) error
+	FindColonyByInviteCode(inviteCode string) (Colony, error)
 	JoinColony(userID, colonyID, inviteCode string) (Colony, error)
 	LeaveColony(userID, colonyID string) error
 	ListColonyMembers(colonyID string) ([]ColonyMember, error)
@@ -346,17 +347,33 @@ func (r *MemoryRepository) CreateColony(colony Colony) (Colony, error) {
 	return colony, nil
 }
 
+// ListColonies returns every colony the user belongs to, not only the ones
+// they created — a colony you joined is one you need to see. The creator is
+// recorded as a member at creation time, so they are covered by the same check.
 func (r *MemoryRepository) ListColonies(userID string) ([]Colony, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	items := make([]Colony, 0)
 	for _, colony := range r.colonies {
-		if colony.OwnerUserID == userID {
+		if _, ok := r.colonyMembers[colony.ID][userID]; ok {
 			items = append(items, colony)
 		}
 	}
 	sortColonies(items)
 	return items, nil
+}
+
+// FindColonyByInviteCode lets someone join with nothing but the code they were
+// given. Join needs a colony ID, which an outsider has no way to discover.
+func (r *MemoryRepository) FindColonyByInviteCode(inviteCode string) (Colony, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, colony := range r.colonies {
+		if colony.InviteCode == inviteCode {
+			return colony, nil
+		}
+	}
+	return Colony{}, ErrNotFound
 }
 
 func (r *MemoryRepository) GetColony(userID, colonyID string) (Colony, error) {
