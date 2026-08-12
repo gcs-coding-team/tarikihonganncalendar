@@ -27,8 +27,8 @@ func drainAndClose(r io.ReadCloser) {
 type ctxKey string
 
 const (
-	CtxKeyRequestID  ctxKey = "request_id"
-	CtxKeyUserID     ctxKey = "user_id"
+	CtxKeyRequestID ctxKey = "request_id"
+	CtxKeyUserID    ctxKey = "user_id"
 )
 
 func GetRequestID(ctx context.Context) string {

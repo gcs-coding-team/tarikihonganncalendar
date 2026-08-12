@@ -7,8 +7,8 @@ import (
 )
 
 type Config struct {
-	AppEnv     string
-	HTTPPort   string
+	AppEnv      string
+	HTTPPort    string
 	DatabaseURL string
 
 	SessionCookieName string
@@ -16,19 +16,19 @@ type Config struct {
 
 	FrontendOrigin string
 
-	ObjectStorageEndpoint string
+	ObjectStorageEndpoint  string
 	ObjectStorageAccessKey string
 	ObjectStorageSecretKey string
-	ObjectStorageBucket   string
-	ObjectStorageRegion   string
+	ObjectStorageBucket    string
+	ObjectStorageRegion    string
 
 	PresignedURLTTL time.Duration
 
 	MaxUploadBytes int64
 
-	OllamaBaseURL       string
-	OllamaModel         string
-	OllamaTimeout       time.Duration
+	OllamaBaseURL string
+	OllamaModel   string
+	OllamaTimeout time.Duration
 
 	WorkerConcurrency int
 	WorkerMaxAttempts int
@@ -36,8 +36,8 @@ type Config struct {
 
 func Load() *Config {
 	return &Config{
-		AppEnv:     getEnv("APP_ENV", "development"),
-		HTTPPort:   getEnv("HTTP_PORT", "8080"),
+		AppEnv:      getEnv("APP_ENV", "development"),
+		HTTPPort:    getEnv("HTTP_PORT", "8080"),
 		DatabaseURL: getEnv("DATABASE_URL", "postgres://user:password@localhost:5432/tarikihongann?sslmode=disable"),
 
 		SessionCookieName: getEnv("SESSION_COOKIE_NAME", "session"),
@@ -45,11 +45,11 @@ func Load() *Config {
 
 		FrontendOrigin: getEnv("FRONTEND_ORIGIN", ""),
 
-		ObjectStorageEndpoint: getEnv("OBJECT_STORAGE_ENDPOINT", ""),
+		ObjectStorageEndpoint:  getEnv("OBJECT_STORAGE_ENDPOINT", ""),
 		ObjectStorageAccessKey: getEnv("OBJECT_STORAGE_ACCESS_KEY", ""),
 		ObjectStorageSecretKey: getEnv("OBJECT_STORAGE_SECRET_KEY", ""),
-		ObjectStorageBucket:   getEnv("OBJECT_STORAGE_BUCKET", ""),
-		ObjectStorageRegion:   getEnv("OBJECT_STORAGE_REGION", ""),
+		ObjectStorageBucket:    getEnv("OBJECT_STORAGE_BUCKET", ""),
+		ObjectStorageRegion:    getEnv("OBJECT_STORAGE_REGION", ""),
 
 		PresignedURLTTL: getDuration("PRESIGNED_URL_TTL_SECONDS", 5*time.Minute),
 
