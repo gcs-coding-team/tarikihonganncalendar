@@ -23,6 +23,7 @@ func NewHandler(repo repository.Repository) *Handler {
 	timetableService := service.NewTimetableService(repo)
 	colonyService := service.NewColonyService(repo)
 	analysisJobService := service.NewAnalysisJobService()
+	h.registerTaskRoutes(service.NewTaskService(repo), service.NewProjectService(repo))
 
 	authWrap := h.withAuth
 	noAuth := func(next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {

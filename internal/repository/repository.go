@@ -127,6 +127,8 @@ type Repository interface {
 	EventRepository
 	TimetableRepository
 	ColonyRepository
+	TaskRepository
+	ProjectRepository
 	SessionRepository
 	AnalysisJobRepository
 }
@@ -174,6 +176,7 @@ type MemoryRepository struct {
 	colonyIndex   map[string][]string
 	sessions      map[string]Session
 	analysisJobs  map[string]AnalysisJob
+	taskStore
 }
 
 func NewMemoryRepository() *MemoryRepository {
@@ -186,6 +189,7 @@ func NewMemoryRepository() *MemoryRepository {
 		colonyIndex:   make(map[string][]string),
 		sessions:      make(map[string]Session),
 		analysisJobs:  make(map[string]AnalysisJob),
+		taskStore:     newTaskStore(),
 	}
 }
 

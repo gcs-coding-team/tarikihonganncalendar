@@ -2,6 +2,18 @@
 
 ベースURL: `http://localhost:8080`
 
+## CORS
+
+`FRONTEND_ORIGIN` に指定した1つのオリジンからのみ、ブラウザで呼べます。
+
+```bash
+FRONTEND_ORIGIN=http://localhost:3000 go run .
+```
+
+未設定なら CORS ヘッダーを出しません（フロントを同一オリジンで配信する構成）。
+プリフライト（OPTIONS）は認証より手前で 204 を返します。ブラウザは
+プリフライトに認証情報を載せないので、認証に通すと必ず 401 で落ちるためです。
+
 ## 認証
 
 X-User-ID ヘッダーもしくは Bearer Token でユーザーを識別します。
@@ -209,7 +221,10 @@ Response `201`: 作成されたエントリ
 
 ### `GET /v1/timetable-entries/{entryId}` — 時間割取得
 
-⚠️ 現在未実装（404 が返ります）
+Headers: `X-User-ID: user-1`
+
+Response `200`: エントリオブジェクト
+Response `404`: 存在しない
 
 ### `PATCH /v1/timetable-entries/{entryId}` — 時間割更新
 
@@ -238,6 +253,8 @@ Response `204`: 成功
 ## Colony API（コロニー/グループ）
 
 ### `GET /v1/colonies` — コロニー一覧
+
+自分がメンバーであるコロニーを返す（作成したものも、参加しただけのものも含む）。
 
 Headers: `X-User-ID: user-1`
 
@@ -285,35 +302,72 @@ Response `201`:
 
 ### `GET /v1/colonies/{colonyId}` — コロニー取得
 
-⚠️ 現在未実装（404 が返ります）
+Headers: `X-User-ID: user-1`
+
+Response `200`: コロニーオブジェクト
+Response `404`: 存在しない / メンバーでない
 
 ### `PATCH /v1/colonies/{colonyId}` — コロニー更新
 
-⚠️ 現在未実装（404 が返ります）
+Headers: `Content-Type: application/json`, `X-User-ID: user-1`
+
+Request（全てのフィールドが省略可能）: `{ "name": "...", "description": "..." }`
+
+Response `200`: 更新後のコロニー
 
 ### `DELETE /v1/colonies/{colonyId}` — コロニー削除
 
-⚠️ 現在未実装（404 が返ります）
+Headers: `X-User-ID: user-1`
 
-### `POST /v1/colonies/{colonyId}/join` — コロニー参加
+Response `204`: 成功
+Response `403`: 作成者ではない
+
+### `POST /v1/colonies/join` — 招待コードで参加
 
 Headers: `Content-Type: application/json`, `X-User-ID: user-1`
 
-⚠️ 現在スタブ実装（常に `{"ok": true}` を返す）
+招待される側はコロニー ID を知らないので、コードだけで参加できる。
+
+Request:
+```json
+{ "inviteCode": "00000001" }
+```
+
+Response `200`: 参加したコロニー（ID と名前が分かる）
+Response `400`: `inviteCode` が空
+Response `404`: そのコードのコロニーが無い
+Response `409`: 既に参加している
+
+### `POST /v1/colonies/{colonyId}/join` — コロニー参加（ID 指定）
+
+Headers: `Content-Type: application/json`, `X-User-ID: user-1`
+
+Request: `{ "inviteCode": "00000001" }`
+
+Response `200`: `{"ok": true}`
+Response `403`: 招待コードが違う
 
 ### `POST /v1/colonies/{colonyId}/leave` — コロニー退出
 
 Headers: `X-User-ID: user-1`
 
-⚠️ 現在スタブ実装（常に `{"ok": true}` を返す）
+Response `200`: `{"ok": true}`
 
 ### `GET /v1/colonies/{colonyId}/members` — メンバー一覧
 
-⚠️ 現在スタブ実装（常に空配列を返す）
+Response `200`:
+```json
+{
+  "data": [
+    { "colonyId": "...", "userId": "user-1", "role": "OWNER", "joinedAt": "..." },
+    { "colonyId": "...", "userId": "user-2", "role": "MEMBER", "joinedAt": "..." }
+  ]
+}
+```
 
 ### `GET /v1/colonies/{colonyId}/feed` — 共有アイテム一覧
 
-⚠️ 現在スタブ実装（常に空配列を返す）
+Response `200`: SharedItem の配列
 
 ---
 
@@ -352,6 +406,99 @@ Response `409`: 同じ `(colonyId, sourceType, sourceId)` の組み合わせが�
 Headers: `X-User-ID: user-1`
 
 Response `204`: 成功
+
+---
+
+## Task API
+
+### `GET /v1/tasks` — タスク一覧
+
+期限の近い順。期限なしは後ろに回ります。
+
+Response `200`:
+```json
+{
+  "data": [
+    {
+      "id": "1784626018489794067",
+      "title": "看板デザイン案の提出",
+      "description": "クラス企画用",
+      "dueAt": "2026-08-20",
+      "status": "OPEN",
+      "projectId": "1784626018489794000",
+      "version": 1
+    }
+  ]
+}
+```
+
+`dueAt` は日付のみ（`YYYY-MM-DD`）。タスクは「その日まで」であって時刻を持たないため。
+`projectId` は無所属なら `null`。
+
+### `POST /v1/tasks` — タスク作成
+
+Request:
+```json
+{
+  "title": "看板デザイン案の提出",
+  "description": "クラス企画用",
+  "dueAt": "2026-08-20",
+  "status": "OPEN",
+  "projectId": "..."
+}
+```
+
+`title` は必須。`status` を省くと `OPEN`。
+`400`: `title` が空 / `status` が `OPEN`・`DONE` 以外 / `dueAt` が `YYYY-MM-DD` でない /
+`projectId` が存在しない
+
+### `GET /v1/tasks/{taskId}` — タスク取得
+
+`403`: 他人のタスク
+
+### `PATCH /v1/tasks/{taskId}` — タスク更新
+
+Request（全てのフィールドが省略可能）:
+```json
+{ "title": "...", "description": "...", "dueAt": "2026-08-20",
+  "status": "DONE", "projectId": null, "version": 1 }
+```
+
+`projectId` に `null` を送ると無所属になります。省略した場合は現状維持です。
+`409`: `version` が食い違う
+
+### `DELETE /v1/tasks/{taskId}` — タスク削除
+
+Response `204`
+
+---
+
+## Project API
+
+### `GET /v1/projects` — プロジェクト一覧
+
+Response `200`:
+```json
+{
+  "data": [
+    { "id": "...", "name": "文化祭 実行委員", "description": "11月の準備",
+      "version": 1, "createdAt": "2026-08-12T12:00:00Z" }
+  ]
+}
+```
+
+### `POST /v1/projects` — プロジェクト作成
+
+Request: `{ "name": "文化祭 実行委員", "description": "任意" }`
+
+`name` は必須。
+
+### `GET /v1/projects/{projectId}` — 取得
+### `PATCH /v1/projects/{projectId}` — 更新（`version` 必須）
+### `DELETE /v1/projects/{projectId}` — 削除
+
+削除しても所属していたタスクは消えません。`projectId` が外れて無所属になります。
+まとめ方をやめただけで中身の作業まで失うのは割に合わないためです。
 
 ---
 
@@ -418,6 +565,40 @@ Response `200`:
 | startAt | string (RFC3339) | 開始日時 |
 | endAt | string (RFC3339) | 終了日時 |
 | allDay | bool | 終日フラグ |
+| repeat | object \| null | 繰り返しの規則。単発なら null |
+| exdates | string[] | 繰り返しから除いた日（`YYYY-MM-DD`） |
+| version | int | 楽観ロック用バージョン |
+
+### Repeat
+
+| フィールド | 型 | 説明 |
+|-----------|-----|------|
+| freq | string | `daily` / `weekly` / `monthly` |
+| until | string | 繰り返しの終わり（`YYYY-MM-DD`）。空なら終わりなし |
+
+系列の展開は呼ぶ側の仕事です。サーバーは規則と除外日を保持するだけです。
+
+`PATCH` で `repeat` を省くと現状維持、`null` を送ると繰り返しを解除します。
+
+### Task
+
+| フィールド | 型 | 説明 |
+|-----------|-----|------|
+| id | string | 自動生成ID |
+| title | string | タイトル |
+| description | string | 説明 |
+| dueAt | string | 期限（`YYYY-MM-DD`）。無ければ空文字 |
+| status | string | `OPEN` / `DONE` |
+| projectId | string \| null | 所属プロジェクト。無所属は null |
+| version | int | 楽観ロック用バージョン |
+
+### Project
+
+| フィールド | 型 | 説明 |
+|-----------|-----|------|
+| id | string | 自動生成ID |
+| name | string | 名前 |
+| description | string | 説明 |
 | version | int | 楽観ロック用バージョン |
 
 ### TimetableEntry
