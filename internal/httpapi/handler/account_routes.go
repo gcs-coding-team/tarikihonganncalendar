@@ -45,6 +45,49 @@ func (h *Handler) registerAccountRoutes(svc *service.AccountService) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
+	// Asking for a reset always answers 204, registered or not — the response
+	// must not reveal whether an address has an account here.
+	h.mux.HandleFunc("/v1/auth/password-reset", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeJSON(w, http.StatusMethodNotAllowed, errorBody("METHOD_NOT_ALLOWED"))
+			return
+		}
+		var in struct {
+			Email string `json:"email"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		if err := svc.RequestPasswordReset(in.Email, h.delivery); err != nil {
+			writeJSON(w, http.StatusInternalServerError, errorBody("INTERNAL_ERROR"))
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	h.mux.HandleFunc("/v1/auth/password-reset/confirm", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeJSON(w, http.StatusMethodNotAllowed, errorBody("METHOD_NOT_ALLOWED"))
+			return
+		}
+		var in struct {
+			Token    string `json:"token"`
+			Password string `json:"password"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			writeJSON(w, http.StatusBadRequest, errorBody("VALIDATION_ERROR"))
+			return
+		}
+		switch err := svc.ResetPassword(in.Token, in.Password); {
+		case err == nil:
+			w.WriteHeader(http.StatusNoContent)
+		case errors.Is(err, service.ErrInvalidResetToken):
+			writeJSON(w, http.StatusBadRequest, errorBody("INVALID_TOKEN"))
+		case repository.IsValidationError(err):
+			writeJSON(w, http.StatusBadRequest, errorBody("VALIDATION_ERROR"))
+		default:
+			writeJSON(w, http.StatusInternalServerError, errorBody("INTERNAL_ERROR"))
+		}
+	})
+
 	h.mux.HandleFunc("/v1/auth/me", h.withAuth(func(w http.ResponseWriter, r *http.Request) {
 		user, err := h.repo.GetUserByID(h.resolveUserID(r))
 		if err != nil {

@@ -9,12 +9,14 @@ import (
 
 	"github.com/gcs-coding-team/tarikihonganncalendar/internal/repository"
 	"github.com/gcs-coding-team/tarikihonganncalendar/internal/service"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/storage"
 )
 
 type Handler struct {
-	mux     *http.ServeMux
-	repo    repository.Repository
-	authSvc *service.AuthService
+	mux      *http.ServeMux
+	repo     repository.Repository
+	authSvc  *service.AuthService
+	delivery service.Delivery
 }
 
 // Options carries the collaborators that are not simply built from the store.
@@ -22,6 +24,22 @@ type Options struct {
 	// Analyser reads photographed handouts. Leave it nil and the analysis
 	// endpoints report that no model is configured rather than pretending.
 	Analyser service.Analyser
+
+	// DevAuth re-opens the pre-password shortcuts: a trusted X-User-ID header
+	// and passwordless session creation. Off unless someone asks for it.
+	DevAuth bool
+
+	// MaxAttempts is how many times to try a model that cannot be reached.
+	// Zero means the service default.
+	MaxAttempts int
+
+	// Delivery carries a password reset to its owner. Nil logs the token
+	// instead of sending it, which is fine locally and nowhere else.
+	Delivery service.Delivery
+
+	// Blobs keeps the photographed handouts. Nil throws them away after
+	// reading, leaving only the dates.
+	Blobs storage.Blobs
 }
 
 func NewHandler(repo repository.Repository, opts ...Options) *Handler {
@@ -30,13 +48,22 @@ func NewHandler(repo repository.Repository, opts ...Options) *Handler {
 		o = opts[0]
 	}
 	h := &Handler{mux: http.NewServeMux(), repo: repo, authSvc: service.NewAuthService(repo)}
+	h.authSvc.DevAuth = o.DevAuth
+	h.delivery = o.Delivery
+	if h.delivery == nil {
+		h.delivery = service.LogDelivery{}
+	}
 
 	eventService := service.NewEventService(repo)
 	timetableService := service.NewTimetableService(repo)
 	colonyService := service.NewColonyService(repo)
 	h.registerTaskRoutes(service.NewTaskService(repo), service.NewProjectService(repo))
 	h.registerAccountRoutes(service.NewAccountService(repo))
-	h.registerAnalysisRoutes(service.NewAnalysisService(repo, o.Analyser))
+	analysisSvc := service.NewAnalysisService(repo, o.Analyser, o.Blobs)
+	if o.MaxAttempts > 0 {
+		analysisSvc.MaxAttempts = o.MaxAttempts
+	}
+	h.registerAnalysisRoutes(analysisSvc)
 
 	authWrap := h.withAuth
 	noAuth := func(next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
@@ -108,24 +135,29 @@ func NewHandler(repo repository.Repository, opts ...Options) *Handler {
 		h.handleColonySubroutes(w, r, colonyService)
 	}))
 
-	h.mux.HandleFunc("/v1/auth/sessions", noAuth(func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodPost:
-			h.createSession(w, r, h.authSvc)
-		case http.MethodDelete:
-			h.deleteSession(w, r, h.authSvc)
-		default:
-			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": map[string]any{"code": "METHOD_NOT_ALLOWED"}})
-		}
-	}))
+	// The passwordless session endpoints only exist in development. Registering
+	// them conditionally means they 404 rather than 403 otherwise — there is
+	// nothing to probe.
+	if o.DevAuth {
+		h.mux.HandleFunc("/v1/auth/sessions", noAuth(func(w http.ResponseWriter, r *http.Request) {
+			switch r.Method {
+			case http.MethodPost:
+				h.createSession(w, r, h.authSvc)
+			case http.MethodDelete:
+				h.deleteSession(w, r, h.authSvc)
+			default:
+				writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": map[string]any{"code": "METHOD_NOT_ALLOWED"}})
+			}
+		}))
 
-	h.mux.HandleFunc("/v1/auth/sessions/", noAuth(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodDelete {
-			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": map[string]any{"code": "METHOD_NOT_ALLOWED"}})
-			return
-		}
-		h.deleteSession(w, r, h.authSvc)
-	}))
+		h.mux.HandleFunc("/v1/auth/sessions/", noAuth(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodDelete {
+				writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": map[string]any{"code": "METHOD_NOT_ALLOWED"}})
+				return
+			}
+			h.deleteSession(w, r, h.authSvc)
+		}))
+	}
 
 	h.mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -526,7 +558,7 @@ func (h *Handler) listColonyMembers(w http.ResponseWriter, r *http.Request, svc 
 	}
 	out := make([]map[string]any, 0, len(members))
 	for _, m := range members {
-		out = append(out, map[string]any{"colonyId": m.ColonyID, "userId": m.UserID, "role": m.Role, "joinedAt": m.JoinedAt})
+		out = append(out, map[string]any{"colonyId": m.ColonyID, "userId": m.UserID, "displayName": m.DisplayName, "role": m.Role, "joinedAt": m.JoinedAt})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": out})
 }

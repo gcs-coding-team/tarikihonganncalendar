@@ -14,17 +14,17 @@ const (
 )
 
 type AnalysisJob struct {
-	ID              string
-	UserID          string
-	PrintID         string
-	IdempotencyKey  string
-	Status          AnalysisStatus
-	AttemptCount    int
-	AvailableAt     time.Time
-	ErrorCode       *string
-	ErrorMessage    *string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ID             string
+	UserID         string
+	PrintID        string
+	IdempotencyKey string
+	Status         AnalysisStatus
+	AttemptCount   int
+	AvailableAt    time.Time
+	ErrorCode      *string
+	ErrorMessage   *string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 type AnalysisResult struct {

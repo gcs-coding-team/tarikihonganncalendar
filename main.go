@@ -25,6 +25,7 @@ import (
 	"github.com/gcs-coding-team/tarikihonganncalendar/internal/repository"
 	"github.com/gcs-coding-team/tarikihonganncalendar/internal/repository/pgstore"
 	"github.com/gcs-coding-team/tarikihonganncalendar/internal/service/vision"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/storage"
 )
 
 //go:embed migrations/0001_init.sql
@@ -45,7 +46,20 @@ func main() {
 		Timeout: time.Duration(getenvInt("OLLAMA_TIMEOUT_SECONDS", 180)) * time.Second,
 	})
 
-	var h http.Handler = handler.NewHandler(repo, handler.Options{Analyser: analyser})
+	// ALLOW_DEV_AUTH re-opens the shortcuts that predate passwords: a trusted
+	// X-User-ID header and passwordless session creation. Convenient against a
+	// local server, and a way straight past every password anywhere else.
+	devAuth := os.Getenv("ALLOW_DEV_AUTH") == "true"
+	if devAuth {
+		log.Print("ALLOW_DEV_AUTH is on — X-User-ID is trusted and sessions can be created without a password")
+	}
+
+	var h http.Handler = handler.NewHandler(repo, handler.Options{
+		Analyser:    analyser,
+		Blobs:       openBlobs(),
+		DevAuth:     devAuth,
+		MaxAttempts: getenvInt("WORKER_MAX_ATTEMPTS", 3),
+	})
 
 	// FRONTEND_ORIGIN names the single origin allowed to call this API from a
 	// browser, e.g. http://localhost:3000. Leave it unset when the frontend is
@@ -74,6 +88,27 @@ func openStore(ctx context.Context) (repository.Repository, func()) {
 	}
 	log.Print("connected to postgres")
 	return store, store.Close
+}
+
+// openBlobs decides where photographed handouts are kept. BLOB_DIR is a
+// directory on this machine — enough for a single server, and the difference
+// between an app that can show you the handout it read and one that cannot.
+// Set it empty to throw the images away after reading.
+func openBlobs() storage.Blobs {
+	dir, set := os.LookupEnv("BLOB_DIR")
+	if !set {
+		dir = "./data/prints"
+	}
+	if dir == "" {
+		log.Print("BLOB_DIR is empty — handouts are read and then discarded")
+		return storage.NewDiscardBlobs()
+	}
+	blobs, err := storage.NewFileBlobs(dir)
+	if err != nil {
+		log.Fatalf("blob storage: %v", err)
+	}
+	log.Printf("keeping handouts in %s", dir)
+	return blobs
 }
 
 func getenv(key, fallback string) string {

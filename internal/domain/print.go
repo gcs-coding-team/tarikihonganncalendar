@@ -5,9 +5,9 @@ import "time"
 type UploadStatus string
 
 const (
-	UploadStatusPending    UploadStatus = "PENDING"
-	UploadStatusCompleted  UploadStatus = "COMPLETED"
-	UploadStatusFailed     UploadStatus = "FAILED"
+	UploadStatusPending   UploadStatus = "PENDING"
+	UploadStatusCompleted UploadStatus = "COMPLETED"
+	UploadStatusFailed    UploadStatus = "FAILED"
 )
 
 type Print struct {

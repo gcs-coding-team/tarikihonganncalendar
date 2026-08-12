@@ -75,10 +75,13 @@ type Colony struct {
 }
 
 type ColonyMember struct {
-	ColonyID string    `json:"colonyId"`
-	UserID   string    `json:"userId"`
-	Role     string    `json:"role"`
-	JoinedAt time.Time `json:"joinedAt"`
+	ColonyID string `json:"colonyId"`
+	UserID   string `json:"userId"`
+	// DisplayName is filled in from the user record. Without it a colony's
+	// member list is a column of opaque ids, which tells nobody who is in it.
+	DisplayName string    `json:"displayName"`
+	Role        string    `json:"role"`
+	JoinedAt    time.Time `json:"joinedAt"`
 }
 
 type SharedItem struct {
@@ -131,6 +134,8 @@ type Repository interface {
 	ProjectRepository
 	UserRepository
 	CandidateRepository
+	PasswordResetRepository
+	PrintRepository
 	SessionRepository
 	AnalysisJobRepository
 }
@@ -477,6 +482,15 @@ func (r *MemoryRepository) ListColonyMembers(colonyID string) ([]ColonyMember, e
 		members = append(members, member)
 	}
 	sortMembers(members)
+	// Names come from the user records. Someone who signed in through the
+	// development shortcut has no record, so their id stands in.
+	for i := range members {
+		if u, ok := r.users[members[i].UserID]; ok && u.DisplayName != "" {
+			members[i].DisplayName = u.DisplayName
+		} else {
+			members[i].DisplayName = members[i].UserID
+		}
+	}
 	return members, nil
 }
 

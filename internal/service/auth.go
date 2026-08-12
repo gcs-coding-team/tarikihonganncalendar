@@ -1,14 +1,23 @@
 package service
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/gcs-coding-team/tarikihonganncalendar/internal/repository"
 )
 
+// AuthService turns a request's headers into the user making it.
+//
+// There used to be two ways straight past it, both left over from before
+// passwords existed. An X-User-ID header was taken at face value, and POST
+// /v1/auth/sessions minted a session for any user id with no password at all,
+// under a token of the form "sess-<userID>" that anyone could guess. Either one
+// made the password on an account decorative.
+//
+// Both now sit behind DevAuth, which is off unless ALLOW_DEV_AUTH is set.
 type AuthService struct {
-	repo repository.SessionRepository
+	repo    repository.SessionRepository
+	DevAuth bool
 }
 
 func (s *AuthService) Repo() repository.SessionRepository {
@@ -20,24 +29,25 @@ func NewAuthService(repo repository.SessionRepository) *AuthService {
 }
 
 func (s *AuthService) CreateSession(userID, name string) (repository.Session, error) {
-	if userID == "" {
+	if !s.DevAuth || userID == "" {
 		return repository.Session{}, repository.ErrForbidden
 	}
-	return s.repo.CreateSession(repository.Session{UserID: userID, Name: name, Token: fmt.Sprintf("sess-%s", userID)})
+	// Still a development shortcut, but no longer a guessable token: whoever
+	// leaves DevAuth on should not also be handing out sessions by name.
+	return s.repo.CreateSession(repository.Session{UserID: userID, Name: name, Token: newToken()})
 }
 
+// ResolveUserID identifies the caller. A bearer token is the only way in unless
+// DevAuth is on.
 func (s *AuthService) ResolveUserID(headerUserID, authorization string) string {
-	if headerUserID != "" {
+	if s.DevAuth && headerUserID != "" {
 		return headerUserID
 	}
-	if authorization == "" {
-		return ""
-	}
 	parts := strings.SplitN(authorization, " ", 2)
-	if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
 		return ""
 	}
-	token := parts[1]
+	token := strings.TrimSpace(parts[1])
 	if token == "" {
 		return ""
 	}

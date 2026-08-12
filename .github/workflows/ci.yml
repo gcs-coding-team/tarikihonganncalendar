@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      # -race because the in-memory store is shared across requests, which is
+      # exactly the kind of thing that passes until it is under load.
+      - name: Test
+        run: go test -race ./...
+
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+  # The schema has to apply to a real Postgres, and apply twice — it runs on
+  # every boot, so a statement missing IF NOT EXISTS breaks the second start.
+  schema:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports: [5432:5432]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply the schema twice
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -c 'CREATE DATABASE tarikihongann'
+          psql -h localhost -U postgres -d tarikihongann -v ON_ERROR_STOP=1 -f migrations/0001_init.sql
+          psql -h localhost -U postgres -d tarikihongann -v ON_ERROR_STOP=1 -f migrations/0001_init.sql

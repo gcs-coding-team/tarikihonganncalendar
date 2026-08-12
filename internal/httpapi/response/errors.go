@@ -5,16 +5,16 @@ import (
 )
 
 const (
-	CodeValidationError     = "VALIDATION_ERROR"
-	CodeUnauthorized        = "UNAUTHORIZED"
-	CodeForbidden           = "FORBIDDEN"
-	CodeNotFound            = "NOT_FOUND"
-	CodeConflict            = "CONFLICT"
-	CodePayloadTooLarge     = "PAYLOAD_TOO_LARGE"
-	CodeUnsupportedMedia    = "UNSUPPORTED_MEDIA_TYPE"
-	CodeInternalError       = "INTERNAL_ERROR"
-	CodeAIProcessingFailed  = "AI_PROCESSING_FAILED"
-	CodeServiceUnavailable  = "SERVICE_UNAVAILABLE"
+	CodeValidationError    = "VALIDATION_ERROR"
+	CodeUnauthorized       = "UNAUTHORIZED"
+	CodeForbidden          = "FORBIDDEN"
+	CodeNotFound           = "NOT_FOUND"
+	CodeConflict           = "CONFLICT"
+	CodePayloadTooLarge    = "PAYLOAD_TOO_LARGE"
+	CodeUnsupportedMedia   = "UNSUPPORTED_MEDIA_TYPE"
+	CodeInternalError      = "INTERNAL_ERROR"
+	CodeAIProcessingFailed = "AI_PROCESSING_FAILED"
+	CodeServiceUnavailable = "SERVICE_UNAVAILABLE"
 )
 
 func BadRequest(w http.ResponseWriter, requestID string, message string, fields map[string]string) {
