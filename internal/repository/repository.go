@@ -129,6 +129,8 @@ type Repository interface {
 	ColonyRepository
 	TaskRepository
 	ProjectRepository
+	UserRepository
+	CandidateRepository
 	SessionRepository
 	AnalysisJobRepository
 }
@@ -177,6 +179,7 @@ type MemoryRepository struct {
 	sessions      map[string]Session
 	analysisJobs  map[string]AnalysisJob
 	taskStore
+	userStore
 }
 
 func NewMemoryRepository() *MemoryRepository {
@@ -190,6 +193,7 @@ func NewMemoryRepository() *MemoryRepository {
 		sessions:      make(map[string]Session),
 		analysisJobs:  make(map[string]AnalysisJob),
 		taskStore:     newTaskStore(),
+		userStore:     newUserStore(),
 	}
 }
 
@@ -664,3 +668,7 @@ func sortSharedItems(items []SharedItem) {
 		}
 	}
 }
+
+// NewID hands out an identifier in the same format the in-memory store uses, so
+// alternative backings (see repository/pgstore) mint ids the same way.
+func NewID() string { return newID() }
