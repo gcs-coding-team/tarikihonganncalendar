@@ -24,6 +24,7 @@ import (
 	"github.com/gcs-coding-team/tarikihonganncalendar/internal/httpapi/middleware"
 	"github.com/gcs-coding-team/tarikihonganncalendar/internal/repository"
 	"github.com/gcs-coding-team/tarikihonganncalendar/internal/repository/pgstore"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/service"
 	"github.com/gcs-coding-team/tarikihonganncalendar/internal/service/vision"
 	"github.com/gcs-coding-team/tarikihonganncalendar/internal/storage"
 )
@@ -56,6 +57,7 @@ func main() {
 
 	var h http.Handler = handler.NewHandler(repo, handler.Options{
 		Analyser:    analyser,
+		Delivery:    openDelivery(),
 		Blobs:       openBlobs(),
 		DevAuth:     devAuth,
 		MaxAttempts: getenvInt("WORKER_MAX_ATTEMPTS", 3),
@@ -88,6 +90,30 @@ func openStore(ctx context.Context) (repository.Repository, func()) {
 	}
 	log.Print("connected to postgres")
 	return store, store.Close
+}
+
+// openDelivery decides how a password reset reaches its owner. Without SMTP
+// configured the token goes to the log, which runs the flow but leaves the
+// person who forgot their password no way to get it.
+func openDelivery() service.Delivery {
+	host := os.Getenv("SMTP_HOST")
+	if host == "" {
+		log.Print("SMTP_HOST is unset — password reset tokens go to this log, not to anyone's inbox")
+		return service.LogDelivery{}
+	}
+	from := getenv("SMTP_FROM", os.Getenv("SMTP_USERNAME"))
+	if from == "" {
+		log.Fatal("SMTP_HOST is set but SMTP_FROM is not — mail needs a sender")
+	}
+	log.Printf("sending password resets through %s as %s", host, from)
+	return service.SMTPDelivery{
+		Host:     host,
+		Port:     getenvInt("SMTP_PORT", 587),
+		Username: os.Getenv("SMTP_USERNAME"),
+		Password: os.Getenv("SMTP_PASSWORD"),
+		From:     from,
+		AppURL:   os.Getenv("APP_URL"),
+	}
 }
 
 // openBlobs decides where photographed handouts are kept. BLOB_DIR is a

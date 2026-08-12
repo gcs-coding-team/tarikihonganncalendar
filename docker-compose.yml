@@ -1,0 +1,77 @@
+# Everything on one machine: the API, its database, and the model that reads
+# handouts. Sized for a single small server rather than a cluster, because that
+# is what this is.
+#
+#   cp .env.example .env    # fill in the SMTP settings
+#   docker compose up -d
+#   docker compose exec ollama ollama pull gemma3:4b
+#
+# The model is not pulled automatically. It is a few gigabytes, and downloading
+# it silently on first boot makes the first start look like a hang.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tariki
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: tarikihongann
+      # Timestamps come back in JST, matching what the app shows.
+      TZ: Asia/Tokyo
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tariki -d tarikihongann"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # Not published. Only the API needs to reach it, and a database open to the
+    # internet is how small servers get found.
+    expose:
+      - "5432"
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama:/root/.ollama
+    expose:
+      - "11434"
+    # A 4B vision model wants roughly 6GB while it works. Without a ceiling it
+    # can take the machine down with it and the API goes too.
+    deploy:
+      resources:
+        limits:
+          memory: ${OLLAMA_MEMORY_LIMIT:-6g}
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgres://tariki:${POSTGRES_PASSWORD}@db:5432/tarikihongann?sslmode=disable
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-gemma3:4b}
+      # A CPU-only machine takes minutes on one image, not seconds.
+      OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-300}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-}
+      APP_URL: ${APP_URL:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+    volumes:
+      - prints:/data
+    ports:
+      - "${API_PORT:-8080}:8080"
+
+volumes:
+  db:
+  ollama:
+  prints:
