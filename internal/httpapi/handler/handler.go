@@ -13,17 +13,30 @@ import (
 
 type Handler struct {
 	mux     *http.ServeMux
+	repo    repository.Repository
 	authSvc *service.AuthService
 }
 
-func NewHandler(repo repository.Repository) *Handler {
-	h := &Handler{mux: http.NewServeMux(), authSvc: service.NewAuthService(repo)}
+// Options carries the collaborators that are not simply built from the store.
+type Options struct {
+	// Analyser reads photographed handouts. Leave it nil and the analysis
+	// endpoints report that no model is configured rather than pretending.
+	Analyser service.Analyser
+}
+
+func NewHandler(repo repository.Repository, opts ...Options) *Handler {
+	var o Options
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+	h := &Handler{mux: http.NewServeMux(), repo: repo, authSvc: service.NewAuthService(repo)}
 
 	eventService := service.NewEventService(repo)
 	timetableService := service.NewTimetableService(repo)
 	colonyService := service.NewColonyService(repo)
-	analysisJobService := service.NewAnalysisJobService()
 	h.registerTaskRoutes(service.NewTaskService(repo), service.NewProjectService(repo))
+	h.registerAccountRoutes(service.NewAccountService(repo))
+	h.registerAnalysisRoutes(service.NewAnalysisService(repo, o.Analyser))
 
 	authWrap := h.withAuth
 	noAuth := func(next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
@@ -112,17 +125,6 @@ func NewHandler(repo repository.Repository) *Handler {
 			return
 		}
 		h.deleteSession(w, r, h.authSvc)
-	}))
-
-	h.mux.HandleFunc("/v1/uploads/jobs", authWrap(func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodPost:
-			h.createAnalysisJob(w, r, analysisJobService)
-		case http.MethodGet:
-			h.listAnalysisJobs(w, r, analysisJobService)
-		default:
-			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": map[string]any{"code": "METHOD_NOT_ALLOWED"}})
-		}
 	}))
 
 	h.mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -707,36 +709,6 @@ func (h *Handler) deleteSession(w http.ResponseWriter, r *http.Request, svc *ser
 		return
 	}
 	writeJSON(w, http.StatusNoContent, nil)
-}
-
-func (h *Handler) createAnalysisJob(w http.ResponseWriter, r *http.Request, svc *service.AnalysisJobService) {
-	userID := h.resolveUserID(r)
-	var input struct {
-		ContentType string `json:"contentType"`
-		Filename    string `json:"filename"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		input = struct {
-			ContentType string `json:"contentType"`
-			Filename    string `json:"filename"`
-		}{}
-	}
-	job, err := svc.CreateJob(userID, input.ContentType, input.Filename)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": map[string]any{"code": "INTERNAL_ERROR"}})
-		return
-	}
-	writeJSON(w, http.StatusCreated, map[string]any{"data": map[string]any{"id": job.ID, "status": job.Status, "filename": job.Filename, "contentType": job.ContentType, "userId": job.UserID}})
-}
-
-func (h *Handler) listAnalysisJobs(w http.ResponseWriter, r *http.Request, svc *service.AnalysisJobService) {
-	userID := h.resolveUserID(r)
-	jobs, err := svc.ListJobs(userID)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": map[string]any{"code": "INTERNAL_ERROR"}})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": jobs})
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {
