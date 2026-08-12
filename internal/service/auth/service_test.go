@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zatunohito/tarikihonganncalendar/internal/domain"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/domain"
 )
 
 type mockUserRepo struct {

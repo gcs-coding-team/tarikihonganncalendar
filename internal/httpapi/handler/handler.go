@@ -23,6 +23,7 @@ func NewHandler(repo repository.Repository) *Handler {
 	timetableService := service.NewTimetableService(repo)
 	colonyService := service.NewColonyService(repo)
 	analysisJobService := service.NewAnalysisJobService()
+	h.registerTaskRoutes(service.NewTaskService(repo), service.NewProjectService(repo))
 
 	authWrap := h.withAuth
 	noAuth := func(next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
@@ -180,11 +181,13 @@ func (h *Handler) listEvents(w http.ResponseWriter, r *http.Request, svc *servic
 func (h *Handler) createEvent(w http.ResponseWriter, r *http.Request, svc *service.EventService) {
 	userID := h.resolveUserID(r)
 	var input struct {
-		Title       string `json:"title"`
-		Description string `json:"description"`
-		StartAt     string `json:"startAt"`
-		EndAt       string `json:"endAt"`
-		AllDay      bool   `json:"allDay"`
+		Title       string             `json:"title"`
+		Description string             `json:"description"`
+		StartAt     string             `json:"startAt"`
+		EndAt       string             `json:"endAt"`
+		AllDay      bool               `json:"allDay"`
+		Repeat      *repository.Repeat `json:"repeat"`
+		ExDates     []string           `json:"exdates"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		if err.Error() == "EOF" {
@@ -204,7 +207,11 @@ func (h *Handler) createEvent(w http.ResponseWriter, r *http.Request, svc *servi
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{"code": "VALIDATION_ERROR"}})
 		return
 	}
-	item, err := svc.Create(userID, service.CreateEventInput{Title: input.Title, Description: input.Description, StartAt: startAt, EndAt: endAt, AllDay: input.AllDay})
+	item, err := svc.Create(userID, service.CreateEventInput{
+		Title: input.Title, Description: input.Description,
+		StartAt: startAt, EndAt: endAt, AllDay: input.AllDay,
+		Repeat: input.Repeat, ExDates: input.ExDates,
+	})
 	if err != nil {
 		if repository.IsValidationError(err) {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{"code": "VALIDATION_ERROR"}})
@@ -236,7 +243,11 @@ func (h *Handler) updateEvent(w http.ResponseWriter, r *http.Request, svc *servi
 		StartAt     *string `json:"startAt"`
 		EndAt       *string `json:"endAt"`
 		AllDay      *bool   `json:"allDay"`
-		Version     int     `json:"version"`
+		// Raw, so that an absent "repeat" (leave the rule alone) stays
+		// distinguishable from an explicit null (drop it).
+		Repeat  json.RawMessage `json:"repeat"`
+		ExDates *[]string       `json:"exdates"`
+		Version int             `json:"version"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		if err.Error() == "EOF" {
@@ -264,8 +275,25 @@ func (h *Handler) updateEvent(w http.ResponseWriter, r *http.Request, svc *servi
 		}
 		endAt = &parsed
 	}
-	item, err := svc.Update(userID, eventID, service.UpdateEventInput{Title: input.Title, Description: input.Description, StartAt: startAt, EndAt: endAt, AllDay: input.AllDay, Version: input.Version})
+	var repeat **repository.Repeat
+	if len(input.Repeat) > 0 {
+		var parsed *repository.Repeat
+		if err := json.Unmarshal(input.Repeat, &parsed); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{"code": "VALIDATION_ERROR"}})
+			return
+		}
+		repeat = &parsed
+	}
+	item, err := svc.Update(userID, eventID, service.UpdateEventInput{
+		Title: input.Title, Description: input.Description,
+		StartAt: startAt, EndAt: endAt, AllDay: input.AllDay,
+		Repeat: repeat, ExDates: input.ExDates, Version: input.Version,
+	})
 	if err != nil {
+		if repository.IsValidationError(err) {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{"code": "VALIDATION_ERROR"}})
+			return
+		}
 		writeJSON(w, http.StatusConflict, map[string]any{"error": map[string]any{"code": "CONFLICT"}})
 		return
 	}
@@ -404,6 +432,12 @@ func (h *Handler) handleColonySubroutes(w http.ResponseWriter, r *http.Request, 
 
 	if len(parts) == 1 {
 		id := parts[0]
+		// /v1/colonies/join carries the invite code alone, with no colony ID —
+		// that is the whole point, since the invitee has never seen the ID.
+		if id == "join" && r.Method == http.MethodPost {
+			h.joinColonyByCode(w, r, svc)
+			return
+		}
 		if id == "members" || id == "feed" || id == "join" || id == "leave" {
 			writeJSON(w, http.StatusNotFound, map[string]any{"error": map[string]any{"code": "NOT_FOUND"}})
 			return
@@ -533,6 +567,34 @@ func (h *Handler) joinColony(w http.ResponseWriter, r *http.Request, svc *servic
 	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"ok": true}})
 }
 
+// joinColonyByCode serves POST /v1/colonies/join, where the body carries only
+// the invite code. It returns the colony so the caller learns its ID and name.
+func (h *Handler) joinColonyByCode(w http.ResponseWriter, r *http.Request, svc *service.ColonyService) {
+	userID := h.resolveUserID(r)
+	var input struct {
+		InviteCode string `json:"inviteCode"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{"code": "VALIDATION_ERROR"}})
+		return
+	}
+	colony, err := svc.JoinByInviteCode(userID, input.InviteCode)
+	if err != nil {
+		switch {
+		case err == repository.ErrDuplicate:
+			writeJSON(w, http.StatusConflict, map[string]any{"error": map[string]any{"code": "CONFLICT"}})
+		case err == repository.ErrForbidden:
+			writeJSON(w, http.StatusForbidden, map[string]any{"error": map[string]any{"code": "FORBIDDEN"}})
+		case repository.IsValidationError(err):
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{"code": "VALIDATION_ERROR"}})
+		default:
+			writeJSON(w, http.StatusNotFound, map[string]any{"error": map[string]any{"code": "NOT_FOUND"}})
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": serializeColony(colony)})
+}
+
 func (h *Handler) leaveColony(w http.ResponseWriter, r *http.Request, svc *service.ColonyService, colonyID string) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": map[string]any{"code": "METHOD_NOT_ALLOWED"}})
@@ -555,14 +617,19 @@ func (h *Handler) handleSharedItems(w http.ResponseWriter, r *http.Request, svc 
 	switch r.Method {
 	case http.MethodPost:
 		var input struct {
-			SourceType string `json:"sourceType"`
-			SourceID   string `json:"sourceId"`
+			SourceType    string `json:"sourceType"`
+			SourceID      string `json:"sourceId"`
+			TitleSnapshot string `json:"titleSnapshot"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{"code": "VALIDATION_ERROR"}})
 			return
 		}
-		item, err := svc.CreateSharedItem(userID, colonyID, service.CreateSharedItemInput{SourceType: input.SourceType, SourceID: input.SourceID})
+		item, err := svc.CreateSharedItem(userID, colonyID, service.CreateSharedItemInput{
+			SourceType:    input.SourceType,
+			SourceID:      input.SourceID,
+			TitleSnapshot: input.TitleSnapshot,
+		})
 		if err != nil {
 			if err == repository.ErrDuplicate {
 				writeJSON(w, http.StatusConflict, map[string]any{"error": map[string]any{"code": "CONFLICT"}})
@@ -693,7 +760,18 @@ func parseTime(value string) (time.Time, error) {
 }
 
 func serializeEvent(item repository.Event) map[string]any {
-	return map[string]any{"id": item.ID, "title": item.Title, "description": item.Description, "startAt": item.StartAt.Format(time.RFC3339), "endAt": item.EndAt.Format(time.RFC3339), "allDay": item.AllDay, "version": item.Version}
+	out := map[string]any{"id": item.ID, "title": item.Title, "description": item.Description, "startAt": item.StartAt.Format(time.RFC3339), "endAt": item.EndAt.Format(time.RFC3339), "allDay": item.AllDay, "version": item.Version}
+	if item.Repeat != nil {
+		out["repeat"] = item.Repeat
+	}
+	// Always present, so a client can tell an event with no dropped days from
+	// one whose exceptions it simply has not loaded.
+	if item.ExDates == nil {
+		out["exdates"] = []string{}
+	} else {
+		out["exdates"] = item.ExDates
+	}
+	return out
 }
 
 func serializeEvents(items []repository.Event) []map[string]any {

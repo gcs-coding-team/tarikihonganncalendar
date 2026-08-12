@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zatunohito/tarikihonganncalendar/internal/domain"
-	"github.com/zatunohito/tarikihonganncalendar/internal/repository"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/domain"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/repository/dbrepo"
 )
 
 type mockTaskRepo struct {
@@ -22,7 +22,7 @@ func (m *mockTaskRepo) FindByID(_ context.Context, id string) (*domain.Task, err
 	return m.tasks[id], nil
 }
 
-func (m *mockTaskRepo) FindByUserID(_ context.Context, userID string, filter repository.ListTasksFilter) ([]*domain.Task, string, error) {
+func (m *mockTaskRepo) FindByUserID(_ context.Context, userID string, filter dbrepo.ListTasksFilter) ([]*domain.Task, string, error) {
 	var result []*domain.Task
 	for _, t := range m.tasks {
 		if t.UserID == userID {
@@ -139,7 +139,7 @@ func TestList(t *testing.T) {
 	svc.Create(context.Background(), CreateInput{UserID: "user-1", Title: "T2"})
 	svc.Create(context.Background(), CreateInput{UserID: "user-2", Title: "T3"})
 
-	tasks, _, err := svc.List(context.Background(), "user-1", repository.ListTasksFilter{Limit: 50})
+	tasks, _, err := svc.List(context.Background(), "user-1", dbrepo.ListTasksFilter{Limit: 50})
 	if err != nil {
 		t.Fatal(err)
 	}

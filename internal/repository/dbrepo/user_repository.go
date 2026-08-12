@@ -1,9 +1,9 @@
-package repository
+package dbrepo
 
 import (
 	"context"
 
-	"github.com/zatunohito/tarikihonganncalendar/internal/domain"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/domain"
 )
 
 type UserRepository interface {

@@ -1,10 +1,10 @@
-package repository
+package dbrepo
 
 import (
 	"context"
 	"time"
 
-	"github.com/zatunohito/tarikihonganncalendar/internal/domain"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/domain"
 )
 
 type ListTasksFilter struct {

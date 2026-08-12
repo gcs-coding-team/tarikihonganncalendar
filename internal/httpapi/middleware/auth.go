@@ -7,11 +7,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/zatunohito/tarikihonganncalendar/internal/httpapi/response"
-	"github.com/zatunohito/tarikihonganncalendar/internal/repository"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/httpapi/response"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/repository/dbrepo"
 )
 
-func RequireAuth(sessions repository.SessionRepository) func(http.Handler) http.Handler {
+func RequireAuth(sessions dbrepo.SessionRepository) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			reqID := GetRequestID(r.Context())

@@ -13,8 +13,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/zatunohito/tarikihonganncalendar/internal/domain"
-	"github.com/zatunohito/tarikihonganncalendar/internal/repository"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/domain"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/repository/dbrepo"
 )
 
 var (
@@ -25,11 +25,11 @@ var (
 )
 
 type Service struct {
-	users    repository.UserRepository
-	sessions repository.SessionRepository
+	users    dbrepo.UserRepository
+	sessions dbrepo.SessionRepository
 }
 
-func NewService(users repository.UserRepository, sessions repository.SessionRepository) *Service {
+func NewService(users dbrepo.UserRepository, sessions dbrepo.SessionRepository) *Service {
 	return &Service{users: users, sessions: sessions}
 }
 

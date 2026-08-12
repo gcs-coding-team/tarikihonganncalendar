@@ -90,15 +90,26 @@ func Recoverer(next http.Handler) http.Handler {
 	})
 }
 
+// CORS answers cross-origin requests from allowedOrigin. The preflight is
+// answered here and never reaches what sits behind it: a browser sends
+// OPTIONS without credentials, so letting it through to the auth check
+// would fail every cross-origin request with a 401 before the real one runs.
+//
+// An empty allowedOrigin means same-origin only — no headers go out, and a
+// browser refuses the cross-origin call on its own.
 func CORS(allowedOrigin string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if allowedOrigin != "" {
 				w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
 				w.Header().Set("Access-Control-Allow-Credentials", "true")
+				w.Header().Add("Vary", "Origin")
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+				// Callers are identified by X-User-ID or Authorization, so a
+				// browser has to be told it may send them.
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Cookie, X-User-ID, Authorization")
+				w.Header().Set("Access-Control-Max-Age", "600")
 			}
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Cookie")
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)
 				return

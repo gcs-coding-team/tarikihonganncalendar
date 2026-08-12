@@ -8,8 +8,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/zatunohito/tarikihonganncalendar/internal/domain"
-	"github.com/zatunohito/tarikihonganncalendar/internal/repository"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/domain"
+	"github.com/gcs-coding-team/tarikihonganncalendar/internal/repository/dbrepo"
 )
 
 type TaskRepository struct {
@@ -43,7 +43,7 @@ func (r *TaskRepository) FindByID(ctx context.Context, id string) (*domain.Task,
 	return t, nil
 }
 
-func (r *TaskRepository) FindByUserID(ctx context.Context, userID string, filter repository.ListTasksFilter) ([]*domain.Task, string, error) {
+func (r *TaskRepository) FindByUserID(ctx context.Context, userID string, filter dbrepo.ListTasksFilter) ([]*domain.Task, string, error) {
 	args := []any{userID}
 	query := `SELECT id, user_id, title, description, due_at, status, source_print_id, version, created_at, updated_at FROM tasks WHERE user_id = $1`
 

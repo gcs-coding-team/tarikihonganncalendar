@@ -24,6 +24,15 @@ func IsValidationError(err error) bool {
 	return errors.Is(err, errValidation)
 }
 
+// Repeat describes a recurring event. Freq is daily, weekly or monthly; the
+// series starts on the event's StartAt and runs until Until, or forever when
+// Until is empty. Dates are held as YYYY-MM-DD because a recurrence rule is
+// about calendar days, not instants.
+type Repeat struct {
+	Freq  string `json:"freq"`
+	Until string `json:"until,omitempty"`
+}
+
 type Event struct {
 	ID          string    `json:"id"`
 	UserID      string    `json:"userId"`
@@ -32,9 +41,14 @@ type Event struct {
 	StartAt     time.Time `json:"startAt"`
 	EndAt       time.Time `json:"endAt"`
 	AllDay      bool      `json:"allDay"`
-	Version     int       `json:"version"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	// Repeat is nil for a one-off event. Expanding the series is left to the
+	// caller; what is stored here is the rule and the days dropped from it.
+	Repeat  *Repeat  `json:"repeat,omitempty"`
+	ExDates []string `json:"exdates,omitempty"`
+
+	Version   int       `json:"version"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 type TimetableEntry struct {
@@ -100,6 +114,7 @@ type ColonyRepository interface {
 	GetColony(userID, colonyID string) (Colony, error)
 	UpdateColony(colony Colony) (Colony, error)
 	DeleteColony(userID, colonyID string) error
+	FindColonyByInviteCode(inviteCode string) (Colony, error)
 	JoinColony(userID, colonyID, inviteCode string) (Colony, error)
 	LeaveColony(userID, colonyID string) error
 	ListColonyMembers(colonyID string) ([]ColonyMember, error)
@@ -112,6 +127,8 @@ type Repository interface {
 	EventRepository
 	TimetableRepository
 	ColonyRepository
+	TaskRepository
+	ProjectRepository
 	SessionRepository
 	AnalysisJobRepository
 }
@@ -159,6 +176,7 @@ type MemoryRepository struct {
 	colonyIndex   map[string][]string
 	sessions      map[string]Session
 	analysisJobs  map[string]AnalysisJob
+	taskStore
 }
 
 func NewMemoryRepository() *MemoryRepository {
@@ -171,6 +189,7 @@ func NewMemoryRepository() *MemoryRepository {
 		colonyIndex:   make(map[string][]string),
 		sessions:      make(map[string]Session),
 		analysisJobs:  make(map[string]AnalysisJob),
+		taskStore:     newTaskStore(),
 	}
 }
 
@@ -346,17 +365,33 @@ func (r *MemoryRepository) CreateColony(colony Colony) (Colony, error) {
 	return colony, nil
 }
 
+// ListColonies returns every colony the user belongs to, not only the ones
+// they created — a colony you joined is one you need to see. The creator is
+// recorded as a member at creation time, so they are covered by the same check.
 func (r *MemoryRepository) ListColonies(userID string) ([]Colony, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	items := make([]Colony, 0)
 	for _, colony := range r.colonies {
-		if colony.OwnerUserID == userID {
+		if _, ok := r.colonyMembers[colony.ID][userID]; ok {
 			items = append(items, colony)
 		}
 	}
 	sortColonies(items)
 	return items, nil
+}
+
+// FindColonyByInviteCode lets someone join with nothing but the code they were
+// given. Join needs a colony ID, which an outsider has no way to discover.
+func (r *MemoryRepository) FindColonyByInviteCode(inviteCode string) (Colony, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, colony := range r.colonies {
+		if colony.InviteCode == inviteCode {
+			return colony, nil
+		}
+	}
+	return Colony{}, ErrNotFound
 }
 
 func (r *MemoryRepository) GetColony(userID, colonyID string) (Colony, error) {
