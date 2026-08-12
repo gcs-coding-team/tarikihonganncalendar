@@ -14,17 +14,27 @@ FRONTEND_ORIGIN=http://localhost:3000 go run .
 プリフライト（OPTIONS）は認証より手前で 204 を返します。ブラウザは
 プリフライトに認証情報を載せないので、認証に通すと必ず 401 で落ちるためです。
 
+## 保存先
+
+`DATABASE_URL` を設定すると Postgres に保存します。未設定ならメモリ上で動き、
+プロセスを落とすと全部消えます（デモ用。残したいものを置く場所ではありません）。
+
+スキーマは起動時に自動で適用されます。全ての文が `IF NOT EXISTS` なので、
+毎回動かしても害はありません。
+
 ## 認証
 
-X-User-ID ヘッダーもしくは Bearer Token でユーザーを識別します。
+`Authorization: Bearer <token>` でユーザーを識別します。
+トークンは登録・ログインで受け取ります。
 
 ```
-X-User-ID: user-1
-Authorization: Bearer sess-user-1
+Authorization: Bearer 4f3c...（64桁の16進）
 ```
 
-事前に `POST /v1/auth/sessions` でセッションを作成し、返却された `token` を Authorization ヘッダーに指定します。
-簡易実装のため、当面は `X-User-ID` ヘッダー直指定も利用可能です。
+パスワードは argon2id で、セッショントークンは SHA-256 で保存されます。
+どちらも平文では保存されません。
+
+`X-User-ID` ヘッダーの直指定も当面は通ります（開発用）。本番では塞いでください。
 
 ---
 
@@ -71,7 +81,48 @@ Authorization: Bearer sess-user-1
 
 ## 認証 API
 
-### `POST /v1/auth/sessions` — セッション作成
+### `POST /v1/auth/register` — 登録
+
+Request:
+```json
+{ "email": "zav@example.com", "password": "correcthorse", "displayName": "ザビエル" }
+```
+
+Response `200`:
+```json
+{
+  "data": {
+    "token": "4f3c...",
+    "user": { "id": "1786575858797889066", "displayName": "ザビエル" }
+  }
+}
+```
+
+`displayName` を省くとメールの `@` より前を使います。
+
+- `400` — メールが不正、またはパスワードが8文字未満
+- `409` — そのメールは登録済み
+
+### `POST /v1/auth/login` — ログイン
+
+Request: `{ "email": "...", "password": "..." }`
+
+Response `200`: 登録と同じ形
+
+`401` — パスワードが違う場合と、そのメールが存在しない場合の**両方**。
+どちらか判別できると、誰がここにアカウントを持っているか調べられてしまうためです。
+
+### `POST /v1/auth/logout` — ログアウト
+
+Headers: `Authorization: Bearer <token>`
+
+Response `204`: セッションを破棄
+
+### `GET /v1/auth/me` — 自分を引く
+
+Response `200`: `{ "data": { "id": "...", "displayName": "..." } }`
+
+### `POST /v1/auth/sessions` — セッション作成（旧・開発用）
 
 Request:
 ```json
@@ -503,6 +554,39 @@ Request: `{ "name": "文化祭 実行委員", "description": "任意" }`
 ---
 
 ## AnalysisJob API（AI解析ジョブ）
+
+### `POST /v1/uploads/jobs/{jobId}/analyse` — 画像を送って解析する
+
+Headers: `Authorization: Bearer <token>`
+
+Body: 画像のバイト列をそのまま（最大 10MB）
+
+Response `200`:
+```json
+{
+  "data": {
+    "job": { "id": "...", "status": "review_required", "resultSummary": "2件のタスクと1件の予定" },
+    "candidates": [
+      { "type": "task",  "title": "数学プリント p.24", "date": "2026-08-20" },
+      { "type": "event", "title": "保護者会", "date": "2026-08-25", "time": "10:00" }
+    ]
+  }
+}
+```
+
+候補はここで返るだけで、カレンダーには入りません。人が確認してから登録します。
+読み取れなかった行は捨てます。推測で日付を埋めることはしません。
+
+`status` は `queued` → `processing` → `review_required`、失敗すると `failed`。
+`failed` のときは `resultSummary` に理由が入り、候補は空のままです。
+解析モデル（`OLLAMA_BASE_URL`）に繋がらないときも `failed` になります。
+
+- `403` — 他人のジョブ
+- `413` — 10MB 超
+
+### `GET /v1/uploads/jobs/{jobId}/candidates` — 候補一覧
+
+### `GET /v1/uploads/jobs/{jobId}` — ジョブ取得
 
 ### `POST /v1/uploads/jobs` — 解析ジョブ作成
 
