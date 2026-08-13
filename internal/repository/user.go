@@ -40,6 +40,14 @@ type UserRepository interface {
 	CreateUser(user User) (User, error)
 	GetUserByEmail(email string) (User, error)
 	GetUserByID(id string) (User, error)
+	UpdateUserDisplayName(userID, name string) (User, error)
+	// UpdateUserEmail returns ErrDuplicate if another account already uses it.
+	UpdateUserEmail(userID, email string) (User, error)
+	// DeleteUser removes the account and everything it owns: events, tasks,
+	// projects, timetable entries, prints, sessions, any colony it owns (and
+	// that colony's membership and shared items), and its membership in
+	// colonies owned by someone else. There is no undo.
+	DeleteUser(userID string) error
 }
 
 type CandidateRepository interface {
@@ -100,6 +108,109 @@ func (r *MemoryRepository) GetUserByID(id string) (User, error) {
 		return User{}, ErrNotFound
 	}
 	return u, nil
+}
+
+func (r *MemoryRepository) UpdateUserDisplayName(userID, name string) (User, error) {
+	r.userMu.Lock()
+	defer r.userMu.Unlock()
+	user, ok := r.users[userID]
+	if !ok {
+		return User{}, ErrNotFound
+	}
+	user.DisplayName = name
+	user.UpdatedAt = time.Now().UTC()
+	r.users[userID] = user
+	return user, nil
+}
+
+func (r *MemoryRepository) UpdateUserEmail(userID, email string) (User, error) {
+	r.userMu.Lock()
+	defer r.userMu.Unlock()
+	user, ok := r.users[userID]
+	if !ok {
+		return User{}, ErrNotFound
+	}
+	for id, u := range r.users {
+		if id != userID && u.Email == email {
+			return User{}, ErrDuplicate
+		}
+	}
+	user.Email = email
+	user.UpdatedAt = time.Now().UTC()
+	r.users[userID] = user
+	return user, nil
+}
+
+// DeleteUser locks r.mu, then r.taskMu, then r.userMu — in that order and
+// never nested the other way round — since it is the only place that needs
+// more than one of the three at once.
+func (r *MemoryRepository) DeleteUser(userID string) error {
+	r.mu.Lock()
+	for id, e := range r.events {
+		if e.UserID == userID {
+			delete(r.events, id)
+		}
+	}
+	for id, t := range r.timetable {
+		if t.UserID == userID {
+			delete(r.timetable, id)
+		}
+	}
+	for id, c := range r.colonies {
+		if c.OwnerUserID == userID {
+			delete(r.colonies, id)
+			delete(r.colonyMembers, id)
+			r.deleteSharedItemsForColonyLocked(id)
+		}
+	}
+	for _, members := range r.colonyMembers {
+		delete(members, userID)
+	}
+	delete(r.colonyIndex, userID)
+	for token, s := range r.sessions {
+		if s.UserID == userID {
+			delete(r.sessions, token)
+		}
+	}
+	var jobIDs []string
+	for id, j := range r.analysisJobs {
+		if j.UserID == userID {
+			jobIDs = append(jobIDs, id)
+			delete(r.analysisJobs, id)
+		}
+	}
+	r.mu.Unlock()
+
+	r.taskMu.Lock()
+	for id, t := range r.tasks {
+		if t.UserID == userID {
+			delete(r.tasks, id)
+		}
+	}
+	for id, p := range r.projects {
+		if p.UserID == userID {
+			delete(r.projects, id)
+		}
+	}
+	r.taskMu.Unlock()
+
+	r.userMu.Lock()
+	for _, jobID := range jobIDs {
+		delete(r.candidates, jobID)
+	}
+	for id, p := range r.prints {
+		if p.UserID == userID {
+			delete(r.prints, id)
+		}
+	}
+	for id, reset := range r.resets {
+		if reset.UserID == userID {
+			delete(r.resets, id)
+		}
+	}
+	delete(r.users, userID)
+	r.userMu.Unlock()
+	return nil
 }
 
 func (r *MemoryRepository) SaveCandidates(jobID string, cands []Candidate) error {

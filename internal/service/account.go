@@ -89,6 +89,77 @@ func (s *AccountService) Logout(token string) error {
 	return s.repo.DeleteSession(token)
 }
 
+// UpdateDisplayName is the one field on an account nobody needs a password to
+// prove they own — it is just a label.
+func (s *AccountService) UpdateDisplayName(userID, name string) (repository.User, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return repository.User{}, repository.ValidationError("displayName is required")
+	}
+	return s.repo.UpdateUserDisplayName(userID, name)
+}
+
+// ChangeEmail and ChangePassword both re-check the current password even
+// though the caller already holds a valid session: a session can be left open
+// on a shared computer, and the one thing that should still stop someone
+// there from taking the account over is the password.
+
+func (s *AccountService) ChangeEmail(userID, currentPassword, newEmail string) (repository.User, error) {
+	user, err := s.repo.GetUserByID(userID)
+	if err != nil {
+		return repository.User{}, err
+	}
+	if !verifyPassword(user.PasswordHash, currentPassword) {
+		return repository.User{}, ErrInvalidCredentials
+	}
+	email := normalizeEmail(newEmail)
+	if email == "" || !strings.Contains(email, "@") {
+		return repository.User{}, repository.ValidationError("email is required")
+	}
+	updated, err := s.repo.UpdateUserEmail(userID, email)
+	if errors.Is(err, repository.ErrDuplicate) {
+		return repository.User{}, ErrEmailTaken
+	}
+	return updated, err
+}
+
+// ChangePassword drops every other session so a stolen one stops working the
+// moment the real owner changes the password, then hands back a fresh token
+// for the device that just proved it is them — otherwise the person who just
+// changed their own password would find themselves logged out by it.
+func (s *AccountService) ChangePassword(userID, currentPassword, newPassword string) (repository.Session, error) {
+	user, err := s.repo.GetUserByID(userID)
+	if err != nil {
+		return repository.Session{}, err
+	}
+	if !verifyPassword(user.PasswordHash, currentPassword) {
+		return repository.Session{}, ErrInvalidCredentials
+	}
+	if len(newPassword) < 8 {
+		return repository.Session{}, repository.ValidationError("password must be at least 8 characters")
+	}
+	if err := s.repo.UpdateUserPassword(userID, hashPassword(newPassword)); err != nil {
+		return repository.Session{}, err
+	}
+	if err := s.repo.DeleteSessionsForUser(userID); err != nil {
+		return repository.Session{}, err
+	}
+	return s.issue(user)
+}
+
+// DeleteAccount takes the password once more, for the same reason as above,
+// and then there is nothing left to reconsider — everything it owns goes with it.
+func (s *AccountService) DeleteAccount(userID, currentPassword string) error {
+	user, err := s.repo.GetUserByID(userID)
+	if err != nil {
+		return err
+	}
+	if !verifyPassword(user.PasswordHash, currentPassword) {
+		return ErrInvalidCredentials
+	}
+	return s.repo.DeleteUser(userID)
+}
+
 func (s *AccountService) issue(user repository.User) (repository.Session, error) {
 	return s.repo.CreateSession(repository.Session{
 		UserID: user.ID,

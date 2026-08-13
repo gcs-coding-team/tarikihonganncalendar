@@ -89,12 +89,103 @@ func (h *Handler) registerAccountRoutes(svc *service.AccountService) {
 	})
 
 	h.mux.HandleFunc("/v1/auth/me", h.withAuth(func(w http.ResponseWriter, r *http.Request) {
-		user, err := h.repo.GetUserByID(h.resolveUserID(r))
-		if err != nil {
-			writeJSON(w, http.StatusNotFound, errorBody("NOT_FOUND"))
+		userID := h.resolveUserID(r)
+		switch r.Method {
+		case http.MethodGet:
+			user, err := h.repo.GetUserByID(userID)
+			if err != nil {
+				writeJSON(w, http.StatusNotFound, errorBody("NOT_FOUND"))
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"data": serializeUser(user)})
+
+		case http.MethodPatch:
+			var in struct {
+				DisplayName string `json:"displayName"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+				writeJSON(w, http.StatusBadRequest, errorBody("VALIDATION_ERROR"))
+				return
+			}
+			user, err := svc.UpdateDisplayName(userID, in.DisplayName)
+			if err != nil {
+				writeRepoError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"data": serializeUser(user)})
+
+		case http.MethodDelete:
+			var in struct {
+				CurrentPassword string `json:"currentPassword"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&in)
+			if err := svc.DeleteAccount(userID, in.CurrentPassword); err != nil {
+				if errors.Is(err, service.ErrInvalidCredentials) {
+					writeJSON(w, http.StatusUnauthorized, errorBody("UNAUTHORIZED"))
+					return
+				}
+				writeRepoError(w, err)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+
+		default:
+			writeJSON(w, http.StatusMethodNotAllowed, errorBody("METHOD_NOT_ALLOWED"))
+		}
+	}))
+
+	h.mux.HandleFunc("/v1/auth/change-password", h.withAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeJSON(w, http.StatusMethodNotAllowed, errorBody("METHOD_NOT_ALLOWED"))
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"data": serializeUser(user)})
+		var in struct {
+			CurrentPassword string `json:"currentPassword"`
+			NewPassword     string `json:"newPassword"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			writeJSON(w, http.StatusBadRequest, errorBody("VALIDATION_ERROR"))
+			return
+		}
+		session, err := svc.ChangePassword(h.resolveUserID(r), in.CurrentPassword, in.NewPassword)
+		switch {
+		case err == nil:
+			writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"token": session.Token}})
+		case errors.Is(err, service.ErrInvalidCredentials):
+			writeJSON(w, http.StatusUnauthorized, errorBody("UNAUTHORIZED"))
+		case repository.IsValidationError(err):
+			writeJSON(w, http.StatusBadRequest, errorBody("VALIDATION_ERROR"))
+		default:
+			writeJSON(w, http.StatusInternalServerError, errorBody("INTERNAL_ERROR"))
+		}
+	}))
+
+	h.mux.HandleFunc("/v1/auth/change-email", h.withAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeJSON(w, http.StatusMethodNotAllowed, errorBody("METHOD_NOT_ALLOWED"))
+			return
+		}
+		var in struct {
+			CurrentPassword string `json:"currentPassword"`
+			NewEmail        string `json:"newEmail"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			writeJSON(w, http.StatusBadRequest, errorBody("VALIDATION_ERROR"))
+			return
+		}
+		user, err := svc.ChangeEmail(h.resolveUserID(r), in.CurrentPassword, in.NewEmail)
+		switch {
+		case err == nil:
+			writeJSON(w, http.StatusOK, map[string]any{"data": serializeUser(user)})
+		case errors.Is(err, service.ErrInvalidCredentials):
+			writeJSON(w, http.StatusUnauthorized, errorBody("UNAUTHORIZED"))
+		case errors.Is(err, service.ErrEmailTaken):
+			writeJSON(w, http.StatusConflict, errorBody("CONFLICT"))
+		case repository.IsValidationError(err):
+			writeJSON(w, http.StatusBadRequest, errorBody("VALIDATION_ERROR"))
+		default:
+			writeJSON(w, http.StatusInternalServerError, errorBody("INTERNAL_ERROR"))
+		}
 	}))
 }
 
@@ -131,9 +222,11 @@ func (h *Handler) answerAuth(w http.ResponseWriter, user repository.User, sessio
 }
 
 func serializeUser(u repository.User) map[string]any {
-	// No password hash here, obviously, and no email either: the display name
-	// and id are all any screen needs.
-	return map[string]any{"id": u.ID, "displayName": u.DisplayName}
+	// No password hash, obviously. The email is fine here — this only ever
+	// serializes the caller's own account (register/login/me), never someone
+	// else's; a colony's member list is built separately and only carries a
+	// display name.
+	return map[string]any{"id": u.ID, "displayName": u.DisplayName, "email": u.Email}
 }
 
 func bearer(r *http.Request) string {

@@ -222,6 +222,60 @@ func (s *Store) ConsumePasswordReset(token string) (repository.PasswordReset, er
 	return out, nil
 }
 
+func (s *Store) UpdateUserDisplayName(userID, name string) (repository.User, error) {
+	return scanUser(s.pool.QueryRow(ctxb(),
+		`UPDATE users SET display_name = $1, updated_at = now() WHERE id = $2 RETURNING `+userCols,
+		name, userID))
+}
+
+// UpdateUserEmail relies on the table's own UNIQUE constraint rather than
+// checking first and updating second — a check-then-write here would leave a
+// window for two people to claim the same address.
+func (s *Store) UpdateUserEmail(userID, email string) (repository.User, error) {
+	return scanUser(s.pool.QueryRow(ctxb(),
+		`UPDATE users SET email = $1, updated_at = now() WHERE id = $2 RETURNING `+userCols,
+		email, userID))
+}
+
+// DeleteUser removes the account and everything it owns. Sessions and
+// password resets cascade from the users row itself; colony membership and
+// shared items cascade from colonies. Everything else — events, timetable
+// entries, projects, tasks, prints, analysis jobs, and membership in colonies
+// owned by someone else — has no foreign key back to users (none of those
+// tables did before this), so each gets its own statement, all in one
+// transaction so a dropped connection cannot leave the account half-deleted.
+func (s *Store) DeleteUser(userID string) error {
+	tx, err := s.pool.Begin(ctxb())
+	if err != nil {
+		return mapErr(err)
+	}
+	defer tx.Rollback(ctxb())
+
+	stmts := []string{
+		`DELETE FROM colonies WHERE owner_user_id = $1`,
+		`DELETE FROM colony_members WHERE user_id = $1`,
+		`DELETE FROM events WHERE user_id = $1`,
+		`DELETE FROM timetable_entries WHERE user_id = $1`,
+		`DELETE FROM tasks WHERE user_id = $1`,
+		`DELETE FROM projects WHERE user_id = $1`,
+		`DELETE FROM prints WHERE user_id = $1`,
+		`DELETE FROM analysis_jobs WHERE user_id = $1`,
+	}
+	for _, q := range stmts {
+		if _, err := tx.Exec(ctxb(), q, userID); err != nil {
+			return mapErr(err)
+		}
+	}
+	tag, err := tx.Exec(ctxb(), `DELETE FROM users WHERE id = $1`, userID)
+	if err != nil {
+		return mapErr(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return repository.ErrNotFound
+	}
+	return mapErr(tx.Commit(ctxb()))
+}
+
 func (s *Store) UpdateUserPassword(userID, passwordHash string) error {
 	tag, err := s.pool.Exec(ctxb(),
 		`UPDATE users SET password_hash = $1, updated_at = now() WHERE id = $2`,
