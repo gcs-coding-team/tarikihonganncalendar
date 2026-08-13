@@ -441,8 +441,20 @@ func (r *MemoryRepository) DeleteColony(userID, colonyID string) error {
 	}
 	delete(r.colonies, colonyID)
 	delete(r.colonyMembers, colonyID)
-	delete(r.sharedItems, colonyID)
+	r.deleteSharedItemsForColonyLocked(colonyID)
 	return nil
+}
+
+// deleteSharedItemsForColonyLocked removes every shared item belonging to a
+// colony. sharedItems is keyed by the item's own ID, not the colony's, so this
+// has to scan rather than delete by colonyID directly. Callers must already
+// hold r.mu.
+func (r *MemoryRepository) deleteSharedItemsForColonyLocked(colonyID string) {
+	for id, item := range r.sharedItems {
+		if item.ColonyID == colonyID {
+			delete(r.sharedItems, id)
+		}
+	}
 }
 
 func (r *MemoryRepository) JoinColony(userID, colonyID, inviteCode string) (Colony, error) {
