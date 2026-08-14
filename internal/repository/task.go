@@ -31,6 +31,10 @@ type Task struct {
 	Version   int       `json:"version"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
+	// RemindedAt is the date (YYYY-MM-DD) a deadline reminder email was last sent
+	// for this task, or "" if none has gone out. Internal bookkeeping only, so it
+	// never rides along in the JSON the client sees.
+	RemindedAt string `json:"-"`
 }
 
 type Project struct {
@@ -49,6 +53,13 @@ type TaskRepository interface {
 	GetTask(userID, taskID string) (Task, error)
 	UpdateTask(task Task) (Task, error)
 	DeleteTask(userID, taskID string) error
+	// ListTasksDueUnreminded returns every open task due on the given day
+	// (YYYY-MM-DD) that has not already been reminded for that day, across all
+	// users — the reminder job is not scoped to one account.
+	ListTasksDueUnreminded(date string) ([]Task, error)
+	// MarkTaskReminded records that a reminder for the given day went out, so a
+	// second sweep the same day does not send it twice.
+	MarkTaskReminded(taskID, date string) error
 }
 
 type ProjectRepository interface {
@@ -167,6 +178,31 @@ func (r *MemoryRepository) DeleteTask(userID, taskID string) error {
 		return ErrForbidden
 	}
 	delete(r.tasks, taskID)
+	return nil
+}
+
+func (r *MemoryRepository) ListTasksDueUnreminded(date string) ([]Task, error) {
+	r.taskMu.RLock()
+	defer r.taskMu.RUnlock()
+	items := make([]Task, 0)
+	for _, task := range r.tasks {
+		if task.Status == TaskStatusOpen && task.DueAt == date && task.RemindedAt != date {
+			items = append(items, task)
+		}
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
+	return items, nil
+}
+
+func (r *MemoryRepository) MarkTaskReminded(taskID, date string) error {
+	r.taskMu.Lock()
+	defer r.taskMu.Unlock()
+	task, ok := r.tasks[taskID]
+	if !ok {
+		return ErrNotFound
+	}
+	task.RemindedAt = date
+	r.tasks[taskID] = task
 	return nil
 }
 

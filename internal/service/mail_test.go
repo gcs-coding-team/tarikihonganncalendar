@@ -211,6 +211,50 @@ func TestSMTPDeliverySendsTheToken(t *testing.T) {
 	}
 }
 
+func TestSMTPDeliverySendsTheTaskReminder(t *testing.T) {
+	srv := newFakeSMTP(t, true)
+	host, port := splitHostPort(t, srv.addr)
+
+	d := SMTPDelivery{
+		Host: host, Port: port,
+		Username: "user", Password: "pass",
+		From:   "noreply@example.jp",
+		AppURL: "https://calendar.example.jp",
+	}
+	saved := tlsConfigFor
+	tlsConfigFor = func(string) *tls.Config { return &tls.Config{InsecureSkipVerify: true} }
+	t.Cleanup(func() { tlsConfigFor = saved })
+
+	if err := d.SendTaskReminder("zav@example.jp", "レポート提出", "2026-08-15"); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+
+	var raw string
+	select {
+	case raw = <-srv.received:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the server never received a message")
+	}
+
+	if !strings.Contains(raw, "To: zav@example.jp") {
+		t.Errorf("recipient missing:\n%s", raw)
+	}
+	if !strings.Contains(raw, "=?UTF-8?B?") {
+		t.Errorf("subject is not encoded:\n%s", raw)
+	}
+
+	body := decodeBody(t, raw)
+	if !strings.Contains(body, "レポート提出") {
+		t.Errorf("the task title is not in the body:\n%s", body)
+	}
+	if !strings.Contains(body, "2026-08-15") {
+		t.Errorf("the due date is not in the body:\n%s", body)
+	}
+	if !strings.Contains(body, "https://calendar.example.jp") {
+		t.Errorf("the app link is missing:\n%s", body)
+	}
+}
+
 // A reset token in clear text hands over the account to anyone listening, so a
 // server that will not upgrade gets nothing.
 func TestSMTPDeliveryRefusesToSendWithoutTLS(t *testing.T) {

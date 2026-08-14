@@ -85,6 +85,10 @@ CREATE TABLE IF NOT EXISTS tasks (
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS tasks_user_due_idx ON tasks(user_id, due_at);
+-- 締切リマインドメールを送った日付（YYYY-MM-DD）。空なら未送信。同じ日に
+-- 二重送信しないためだけの列で、既存DBにも ALTER で追加できるようにしてある
+-- （CREATE TABLE IF NOT EXISTS は既存テーブルには列を足してくれないので）。
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS reminded_at TEXT NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS colonies (
     id            TEXT PRIMARY KEY,

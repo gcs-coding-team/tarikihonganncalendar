@@ -55,13 +55,22 @@ func main() {
 		log.Print("ALLOW_DEV_AUTH is on — X-User-ID is trusted and sessions can be created without a password")
 	}
 
+	delivery := openDelivery()
+
 	var h http.Handler = handler.NewHandler(repo, handler.Options{
 		Analyser:    analyser,
-		Delivery:    openDelivery(),
+		Delivery:    delivery,
 		Blobs:       openBlobs(),
 		DevAuth:     devAuth,
 		MaxAttempts: getenvInt("WORKER_MAX_ATTEMPTS", 3),
 	})
+
+	// Sweeps for tasks due tomorrow once an hour. Hourly rather than daily so a
+	// task created or rescheduled onto tomorrow any time during the day still
+	// gets its reminder — ListTasksDueUnreminded is idempotent per calendar day,
+	// so the extra sweeps just find nothing new to send.
+	reminders := service.NewReminderService(repo, delivery)
+	go reminders.RunEvery(time.Hour, nil)
 
 	// FRONTEND_ORIGIN names the single origin allowed to call this API from a
 	// browser, e.g. http://localhost:3000. Leave it unset when the frontend is
@@ -92,20 +101,19 @@ func openStore(ctx context.Context) (repository.Repository, func()) {
 	return store, store.Close
 }
 
-// openDelivery decides how a password reset reaches its owner. Without SMTP
-// configured the token goes to the log, which runs the flow but leaves the
-// person who forgot their password no way to get it.
+// openDelivery decides how a password reset or task reminder reaches its
+// owner. Without SMTP configured, both go to the log instead of an inbox.
 func openDelivery() service.Delivery {
 	host := os.Getenv("SMTP_HOST")
 	if host == "" {
-		log.Print("SMTP_HOST is unset — password reset tokens go to this log, not to anyone's inbox")
+		log.Print("SMTP_HOST is unset — password reset tokens and task reminders go to this log, not to anyone's inbox")
 		return service.LogDelivery{}
 	}
 	from := getenv("SMTP_FROM", os.Getenv("SMTP_USERNAME"))
 	if from == "" {
 		log.Fatal("SMTP_HOST is set but SMTP_FROM is not — mail needs a sender")
 	}
-	log.Printf("sending password resets through %s as %s", host, from)
+	log.Printf("sending password resets and task reminders through %s as %s", host, from)
 	return service.SMTPDelivery{
 		Host:     host,
 		Port:     getenvInt("SMTP_PORT", 587),

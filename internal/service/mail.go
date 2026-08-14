@@ -35,6 +35,24 @@ func (d SMTPDelivery) SendPasswordReset(email, token string) error {
 	return d.send(email, subject, body)
 }
 
+func (d SMTPDelivery) SendTaskReminder(email, title, dueAt string) error {
+	subject := "他力本願カレンダー：明日が締切のタスクがあります"
+	body := d.reminderBody(title, dueAt)
+	return d.send(email, subject, body)
+}
+
+func (d SMTPDelivery) reminderBody(title, dueAt string) string {
+	var b strings.Builder
+	b.WriteString("締切が近いタスクがあります。\r\n\r\n")
+	b.WriteString("    " + title + "\r\n")
+	b.WriteString("    締切： " + dueAt + "\r\n\r\n")
+	if d.AppURL != "" {
+		b.WriteString("アプリはこちら： " + d.AppURL + "\r\n\r\n")
+	}
+	b.WriteString("すでに終わっている場合は、このメールは無視してください。\r\n")
+	return b.String()
+}
+
 func (d SMTPDelivery) resetBody(token string) string {
 	var b strings.Builder
 	b.WriteString("パスワードの再設定を受け付けました。\r\n\r\n")

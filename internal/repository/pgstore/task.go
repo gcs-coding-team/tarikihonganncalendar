@@ -110,6 +110,39 @@ func (s *Store) DeleteTask(userID, taskID string) error {
 	return nil
 }
 
+// ListTasksDueUnreminded is not scoped to one user: the reminder job sweeps
+// every account at once, so it queries across the table directly rather than
+// going through taskCols/scanTask, which assume a single-user context.
+func (s *Store) ListTasksDueUnreminded(date string) ([]repository.Task, error) {
+	rows, err := s.pool.Query(ctxb(), `SELECT `+taskCols+` FROM tasks
+		WHERE status=$1 AND due_at=$2 AND reminded_at <> $2 ORDER BY id`,
+		repository.TaskStatusOpen, date)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	defer rows.Close()
+	items := make([]repository.Task, 0)
+	for rows.Next() {
+		t, err := scanTask(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, t)
+	}
+	return items, mapErr(rows.Err())
+}
+
+func (s *Store) MarkTaskReminded(taskID, date string) error {
+	tag, err := s.pool.Exec(ctxb(), `UPDATE tasks SET reminded_at=$1 WHERE id=$2`, date, taskID)
+	if err != nil {
+		return mapErr(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return repository.ErrNotFound
+	}
+	return nil
+}
+
 const projectCols = `id, user_id, name, description, version, created_at, updated_at`
 
 func scanProject(row pgx.Row) (repository.Project, error) {

@@ -215,12 +215,18 @@ func verifyPassword(stored, password string) bool {
 // for a finished feature.
 type Delivery interface {
 	SendPasswordReset(email, token string) error
+	SendTaskReminder(email, title, dueAt string) error
 }
 
 type LogDelivery struct{}
 
 func (LogDelivery) SendPasswordReset(email, token string) error {
 	log.Printf("password reset for %s: token=%s (no mailer configured)", email, token)
+	return nil
+}
+
+func (LogDelivery) SendTaskReminder(email, title, dueAt string) error {
+	log.Printf("task reminder for %s: %q due %s (no mailer configured)", email, title, dueAt)
 	return nil
 }
 

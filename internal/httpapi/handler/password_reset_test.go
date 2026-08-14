@@ -15,6 +15,10 @@ func (d *captureDelivery) SendPasswordReset(email, token string) error {
 	return nil
 }
 
+func (d *captureDelivery) SendTaskReminder(email, title, dueAt string) error {
+	return nil
+}
+
 func signIn(t *testing.T, mux *Handler, email, password string) int {
 	t.Helper()
 	return serve(mux, newRequest(http.MethodPost, "/v1/auth/login",
