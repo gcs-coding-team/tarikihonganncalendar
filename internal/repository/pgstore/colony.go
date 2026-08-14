@@ -2,7 +2,6 @@ package pgstore
 
 import (
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -30,11 +29,7 @@ func (s *Store) CreateColony(colony repository.Colony) (repository.Colony, error
 	defer tx.Rollback(ctxb())
 
 	if colony.InviteCode == "" {
-		var n int
-		if err := tx.QueryRow(ctxb(), `SELECT count(*) FROM colonies`).Scan(&n); err != nil {
-			return repository.Colony{}, mapErr(err)
-		}
-		colony.InviteCode = fmt.Sprintf("%08d", n+1)
+		colony.InviteCode = repository.NewInviteCode()
 	}
 	now := time.Now().UTC()
 	c, err := scanColony(tx.QueryRow(ctxb(), `INSERT INTO colonies (`+colonyCols+`)

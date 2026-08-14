@@ -384,7 +384,7 @@ Response `200`:
       "name": "3年1組",
       "description": "クラス共有",
       "ownerUserId": "user-1",
-      "inviteCode": "00000001"
+      "inviteCode": "K7XPMQ"
     }
   ]
 }
@@ -410,7 +410,7 @@ Response `201`:
     "name": "3年1組",
     "description": "クラス共有",
     "ownerUserId": "user-1",
-    "inviteCode": "00000001"
+    "inviteCode": "K7XPMQ"
   }
 }
 ```
@@ -447,7 +447,7 @@ Headers: `Content-Type: application/json`, `X-User-ID: user-1`
 
 Request:
 ```json
-{ "inviteCode": "00000001" }
+{ "inviteCode": "K7XPMQ" }
 ```
 
 Response `200`: 参加したコロニー（ID と名前が分かる）
@@ -459,7 +459,7 @@ Response `409`: 既に参加している
 
 Headers: `Content-Type: application/json`, `X-User-ID: user-1`
 
-Request: `{ "inviteCode": "00000001" }`
+Request: `{ "inviteCode": "K7XPMQ" }`
 
 Response `200`: `{"ok": true}`
 Response `403`: 招待コードが違う

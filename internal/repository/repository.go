@@ -1,6 +1,7 @@
 package repository
 
 import (
+	crand "crypto/rand"
 	"errors"
 	"fmt"
 	"sync"
@@ -363,7 +364,7 @@ func (r *MemoryRepository) CreateColony(colony Colony) (Colony, error) {
 		colony.UpdatedAt = colony.CreatedAt
 	}
 	if colony.InviteCode == "" {
-		colony.InviteCode = fmt.Sprintf("%08d", len(r.colonies)+1)
+		colony.InviteCode = NewInviteCode()
 	}
 	r.colonies[colony.ID] = colony
 	if _, ok := r.colonyMembers[colony.ID]; !ok {
@@ -698,3 +699,23 @@ func sortSharedItems(items []SharedItem) {
 // NewID hands out an identifier in the same format the in-memory store uses, so
 // alternative backings (see repository/pgstore) mint ids the same way.
 func NewID() string { return newID() }
+
+// inviteCodeAlphabet leaves out 0/O and 1/I, which are easy to misread when a
+// code is copied by hand or read aloud. 32 characters is a power of two, so
+// mapping a random byte into it with modulo introduces no bias.
+const inviteCodeAlphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+
+// NewInviteCode returns a short, hard-to-guess code for joining a colony. It
+// replaces a sequential "00000001" scheme that let anyone enumerate every
+// colony's code just by counting.
+func NewInviteCode() string {
+	b := make([]byte, 6)
+	if _, err := crand.Read(b); err != nil {
+		panic("crypto/rand unavailable: " + err.Error())
+	}
+	out := make([]byte, len(b))
+	for i, v := range b {
+		out[i] = inviteCodeAlphabet[int(v)%len(inviteCodeAlphabet)]
+	}
+	return string(out)
+}
