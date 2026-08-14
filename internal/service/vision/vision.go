@@ -71,13 +71,15 @@ const promptTemplate = `あなたは学校のプリントを読み取る係で�
 
 次の形式の JSON のみを出力してください。説明文は不要です。
 
-{"items":[{"type":"task","title":"数学プリント p.24","date":"2026-08-20"},
+{"items":[{"type":"task","title":"数学プリント p.24","date":"2026-08-20","confidence":"high"},
           {"type":"event","title":"保護者会","date":"2026-08-25","time":"10:00"}]}
 
 規則:
 - type は "task"（提出物・宿題・持ち物）か "event"（行事・集会・時間の決まった予定）
 - date は YYYY-MM-DD
 - time は event のみ。分からなければ省略する
+- confidence は任意。文字が鮮明で読み取りに自信があれば "high"、かすれ・折れ・推測が
+  混じるなど自信が無ければ "medium" を入れる。分からなければ省略してよい
 - 日付が読み取れないものは出力しない
 - 何も見つからなければ {"items":[]}`
 
@@ -150,10 +152,11 @@ func ParseCandidates(s string) ([]repository.Candidate, error) {
 	}
 	var parsed struct {
 		Items []struct {
-			Type  string `json:"type"`
-			Title string `json:"title"`
-			Date  string `json:"date"`
-			Time  string `json:"time"`
+			Type       string `json:"type"`
+			Title      string `json:"title"`
+			Date       string `json:"date"`
+			Time       string `json:"time"`
+			Confidence string `json:"confidence"`
 		} `json:"items"`
 	}
 	if err := json.Unmarshal([]byte(match), &parsed); err != nil {
@@ -174,6 +177,13 @@ func ParseCandidates(s string) ([]repository.Candidate, error) {
 			if timeOnly.MatchString(it.Time) {
 				c.Time = it.Time
 			}
+		}
+		// Anything other than these two exact values is dropped rather than
+		// shown — an unrecognised word from the model is not worth passing
+		// through to a badge that claims to mean something specific.
+		switch strings.ToLower(strings.TrimSpace(it.Confidence)) {
+		case "high", "medium":
+			c.Confidence = strings.ToLower(strings.TrimSpace(it.Confidence))
 		}
 		out = append(out, c)
 	}

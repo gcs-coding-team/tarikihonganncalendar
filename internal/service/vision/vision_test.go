@@ -63,3 +63,33 @@ func TestParseCandidatesDefaultsToTask(t *testing.T) {
 		t.Fatalf("expected one task, got %+v", out)
 	}
 }
+
+// confidence is a hint the model was never required to give. A row without one
+// still counts, and a model inventing its own vocabulary for it doesn't get to
+// put a badge on screen that claims to mean something specific.
+func TestParseCandidatesConfidenceIsOptionalAndWhitelisted(t *testing.T) {
+	out, err := ParseCandidates(`{"items":[
+	  {"type":"task","title":"はっきり読めた","date":"2026-08-20","confidence":"high"},
+	  {"type":"task","title":"かすれてた","date":"2026-08-21","confidence":"MEDIUM"},
+	  {"type":"task","title":"確信度なし","date":"2026-08-22"},
+	  {"type":"task","title":"知らない値","date":"2026-08-23","confidence":"たぶん"}
+	]}`)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(out) != 4 {
+		t.Fatalf("expected 4 rows, got %d: %+v", len(out), out)
+	}
+	if out[0].Confidence != "high" {
+		t.Errorf("expected high, got %+v", out[0])
+	}
+	if out[1].Confidence != "medium" {
+		t.Errorf("expected medium (case-insensitive), got %+v", out[1])
+	}
+	if out[2].Confidence != "" {
+		t.Errorf("expected no confidence when the model gave none, got %+v", out[2])
+	}
+	if out[3].Confidence != "" {
+		t.Errorf("expected an unrecognised value to be dropped, got %+v", out[3])
+	}
+}

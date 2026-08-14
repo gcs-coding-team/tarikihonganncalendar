@@ -34,6 +34,10 @@ type Candidate struct {
 	Title string `json:"title"`
 	Date  string `json:"date"` // YYYY-MM-DD
 	Time  string `json:"time"` // HH:MM, events only
+	// Confidence is "high" or "medium" when the model volunteers one, empty
+	// otherwise. It is a hint, not a guarantee — the model is not asked for it
+	// and nothing here is rejected for lacking it.
+	Confidence string `json:"confidence,omitempty"`
 }
 
 type UserRepository interface {
